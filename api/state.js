@@ -1,7 +1,6 @@
 
 import pg from "pg";
 import crypto from "crypto";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 const { Pool } = pg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -9,48 +8,34 @@ const pool = new Pool({
   max: 3
 });
 
-const JWKS = createRemoteJWKSet(new URL(
-  "https://ep-orange-term-a6zq3bh9.neonauth.us-west-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"
-));
 const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v || "");
 const uid = (v) => isUuid(v) ? v : crypto.randomUUID();
 
-async function authorize(req, client){
-  const h=req.headers.authorization||"";
-  if(!h.startsWith("Bearer ")) return {ok:false,status:401,error:"Inicia sesión para continuar."};
-  try{
-    const {payload}=await jwtVerify(h.slice(7),JWKS);
-    const sub=String(payload.sub||"");
-    const email=String(payload.email||"").trim().toLowerCase();
-    if(!sub||!email) return {ok:false,status:401,error:"Sesión inválida."};
 
-    let q=await client.query(
-      "select id,auth_user_id,name,email,role,active from app_users where auth_user_id=$1 or lower(email)=lower($2) limit 1",
-      [sub,email]
-    );
-    if(q.rows.length){
-      const u=q.rows[0];
-      if(!u.active) return {ok:false,status:403,error:"Usuario desactivado."};
-      if(!u.auth_user_id) await client.query("update app_users set auth_user_id=$1 where id=$2",[sub,u.id]);
-      return {ok:true,user:{id:u.id,email,role:u.role||"Consulta",authUserId:sub}};
-    }
-
-    const admin=(process.env.RENTA_ADMIN_EMAIL||"").trim().toLowerCase();
-    if(admin && email===admin){
-      const ins=await client.query(
-        `insert into app_users(auth_user_id,name,email,role,active)
-         values($1,$2,$3,'Administrador',true)
-         on conflict(auth_user_id) do update set email=excluded.email,active=true
-         returning id,role`,
-        [sub,payload.name||"Administrador",email]
-      );
-      return {ok:true,user:{id:ins.rows[0].id,email,role:"Administrador",authUserId:sub}};
-    }
-    return {ok:false,status:403,error:"Esta cuenta no está autorizada para RentaControl."};
-  }catch(e){
-    console.error("JWT verification failed",e);
-    return {ok:false,status:401,error:"Sesión inválida o expirada."};
+const COOKIE="rentacontrol_session";
+const sha256=v=>crypto.createHash("sha256").update(v).digest("hex");
+function parseCookies(req){
+  const out={};
+  for(const pair of String(req.headers.cookie||"").split(";")){
+    const i=pair.indexOf("=");
+    if(i>0)out[pair.slice(0,i).trim()]=decodeURIComponent(pair.slice(i+1).trim());
   }
+  return out;
+}
+async function authorize(req,client){
+  const token=parseCookies(req)[COOKIE];
+  if(!token)return {ok:false,status:401,error:"Inicia sesión para continuar."};
+  const q=await client.query(
+    `select u.id,u.name,u.email,u.role,u.active,s.id session_id
+     from app_sessions s join app_users u on u.id=s.user_id
+     where s.token_hash=$1 and s.expires_at>now() limit 1`,
+    [sha256(token)]
+  );
+  if(!q.rows.length)return {ok:false,status:401,error:"Sesión inválida o expirada."};
+  const u=q.rows[0];
+  if(!u.active)return {ok:false,status:403,error:"Usuario desactivado."};
+  await client.query("update app_sessions set last_seen_at=now() where id=$1",[u.session_id]);
+  return {ok:true,user:{id:u.id,name:u.name,email:u.email,role:u.role}};
 }
 
 async function readState(client) {
