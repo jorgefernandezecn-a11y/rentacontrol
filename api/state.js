@@ -50,14 +50,18 @@ async function readState(client){
 }
 const stable=x=>JSON.stringify(x||[]);
 function permissionError(role,before,after){
-  if(role==="Administrador")return null;
+  // Administrador y Cobranza tienen acceso operativo completo.
+  if(role==="Administrador" || role==="Cobranza")return null;
+
   const sections=["properties","tenants","contracts","payments","credits","maintenance"];
-  const allowed=role==="Cobranza"?new Set(["payments","credits"]):role==="Mantenimiento"?new Set(["maintenance"]):new Set();
+  const allowed=role==="Mantenimiento"?new Set(["maintenance"]):new Set();
   const changed=sections.filter(k=>stable(before[k])!==stable(after[k]));
+
+  // Mantenimiento puede crear, actualizar, documentar avances y concluir trabajos.
   if(changed.every(k=>allowed.has(k)))return null;
+
   if(role==="Consulta")return "Tu perfil es de solo consulta. No tienes permiso para modificar información.";
-  if(role==="Cobranza")return "Tu perfil de Cobranza solo puede modificar pagos y anticipos.";
-  if(role==="Mantenimiento")return "Tu perfil de Mantenimiento solo puede modificar tareas y reparaciones.";
+  if(role==="Mantenimiento")return "Tu perfil de Mantenimiento puede consultar la información general y modificar únicamente mantenimientos, fallas, notas, avances y estado de los trabajos.";
   return "No tienes permiso para realizar esta modificación.";
 }
 async function replaceState(client,state){
