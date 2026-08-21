@@ -84,7 +84,13 @@ export default async function handler(req,res){
     const a=await authorize(req,client);
     if(!a.ok)return res.status(a.status).json({error:a.error});
     if(req.method==="GET")return res.status(200).json({ok:true,user:a.user,state:await readState(client)});
-    if(req.method==="PUT"){const state=req.body?.state;if(!state)return res.status(400).json({error:"state requerido"});await replaceState(client,state);return res.status(200).json({ok:true,user:a.user,state:await readState(client)})}
+    if(req.method==="PUT"){
+      if(a.user.role==="Consulta")return res.status(403).json({error:"Tu perfil es de solo consulta."});
+      const state=req.body?.state;
+      if(!state)return res.status(400).json({error:"state requerido"});
+      await replaceState(client,state);
+      return res.status(200).json({ok:true,user:a.user,state:await readState(client)});
+    }
     return res.status(405).json({error:"Método no permitido"});
   }catch(e){console.error(e);return res.status(500).json({error:"Error de base de datos",detail:e.message})}
   finally{client.release()}
