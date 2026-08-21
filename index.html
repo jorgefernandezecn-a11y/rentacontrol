@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>RentaControl</title>
+<style>
+:root{--b:#284ac7;--bg:#f4f6fb;--t:#172033;--m:#6d7687;--l:#e5e9f0;--g:#187e5b;--r:#c53f3f;--w:#a86b08}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:var(--t)}
+.app{max-width:1150px;margin:auto;padding:16px 14px 92px}.topbar{display:flex;justify-content:space-between;align-items:center;margin:8px 0 20px}
+.brand{font-size:24px;font-weight:800}.brand span{color:var(--b)}.top-actions{display:flex;gap:8px;align-items:center}.gear{font-size:20px;border:1px solid var(--l);background:#fff;border-radius:12px;padding:8px 11px}
+.cloud{font-size:11px;padding:7px 9px;border-radius:999px;border:1px solid var(--l);background:#fff;color:var(--m)}.cloud.ok{color:var(--g);background:#e8f6f0}.cloud.bad{color:var(--r);background:#ffe7e7}
+h1{font-size:25px;margin:0}.sub{color:var(--m);margin:5px 0 16px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.card{background:#fff;border:1px solid var(--l);border-radius:16px;padding:15px}.click{cursor:pointer}.metric{font-size:22px;font-weight:800;margin-top:5px}.meta{color:var(--m);font-size:12px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--l)}.row:last-child{border:0}
+.btn{border:1px solid var(--l);background:#fff;border-radius:11px;padding:10px 12px;color:var(--t)}.primary{background:var(--b);color:#fff;border-color:var(--b)}.toolbar{display:flex;justify-content:space-between;gap:10px;margin-bottom:12px}
+.view{display:none}.view.active{display:block}table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1px solid var(--l);text-align:left;font-size:13px}th{color:var(--m)}
+nav{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(6,1fr);background:#fff;border-top:1px solid var(--l);z-index:10;padding-bottom:env(safe-area-inset-bottom)}
+nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10px}nav span{display:block;font-size:18px}
+.modal{position:fixed;inset:0;background:#0007;display:none;align-items:flex-end;z-index:20}.modal.on{display:flex}.sheet{background:#fff;width:100%;max-height:90vh;overflow:auto;padding:20px;border-radius:22px 22px 0 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}label{display:block;font-size:12px;color:var(--m);margin:8px 0}input,select,textarea{width:100%;padding:10px;border:1px solid var(--l);border-radius:10px;margin-top:5px}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}.pill{font-size:10px;padding:4px 7px;border-radius:999px;background:#eef2ff;color:var(--b)}
+.danger{background:#ffe7e7;color:var(--r)}.ok{background:#e8f6f0;color:var(--g)}.warn{background:#fff1d8;color:var(--w)}.total-card{margin:12px 0;background:#eef2ff;border-color:#cfd8ff}.total-card .metric{color:var(--b);font-size:28px}
+.settings-list .row{align-items:flex-start}.settings-list select{max-width:230px;margin:0}.info-box{background:#fafbfe;border:1px solid var(--l);border-radius:14px;padding:13px;margin-top:10px}
+
+.auth-gate{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth-gate.hidden{display:none}.auth-box{width:min(440px,100%);background:#fff;border:1px solid var(--l);border-radius:22px;padding:22px}
+.auth-brand{font-size:28px;font-weight:800;margin-bottom:8px}.auth-brand span{color:var(--b)}
+.auth-msg{font-size:13px;margin-top:10px;color:var(--m)}.auth-msg.err{color:var(--r)}.auth-msg.ok{color:var(--g)}
+.auth-tabs{display:flex;gap:8px;margin:14px 0}.auth-tabs button{flex:1}
+
+@media(max-width:760px){.grid,.stats,.two{grid-template-columns:1fr}.toolbar{flex-direction:column}.settings-list .row{flex-direction:column}.settings-list select{max-width:none}}
+</style>
+</head>
+<body>
+
+<div id="authGate" class="auth-gate">
+  <div class="auth-box">
+    <div class="auth-brand">Renta<span>Control</span></div>
+    <p class="sub">Acceso seguro</p>
+    <div class="auth-tabs">
+      <button id="tabLogin" class="btn primary" type="button">Iniciar sesión</button>
+      <button id="tabSignup" class="btn" type="button">Crear cuenta inicial</button>
+    </div>
+    <form id="authForm">
+      <label id="nameWrap" style="display:none">Nombre<input id="authName" autocomplete="name"></label>
+      <label>Correo<input id="authEmail" type="email" autocomplete="email" required></label>
+      <label>Contraseña<input id="authPassword" type="password" autocomplete="current-password" minlength="8" required></label>
+      <button class="btn primary" style="width:100%;margin-top:12px" id="authSubmit">Entrar</button>
+    </form>
+    <button id="forgotPasswordBtn" type="button" class="btn" style="width:100%;margin-top:10px;border:0">¿Olvidaste tu contraseña?</button>
+    <div id="authMsg" class="auth-msg">Usa la cuenta autorizada para RentaControl.</div>
+  </div>
+</div>
+
+<div class="app">
+<div class="topbar"><div class="brand">Renta<span>Control</span></div><div class="top-actions"><span id="cloudState" class="cloud">Nube...</span><button class="gear" id="notificationsBtn" title="Avisos" style="position:relative">🔔<span id="notificationCount" style="display:none;position:absolute;top:-5px;right:-5px;background:#c53f3f;color:white;border-radius:999px;font-size:9px;min-width:17px;height:17px;line-height:17px;text-align:center;padding:0 4px"></span></button><button class="gear" id="settingsBtn">⚙️</button></div></div>
+
+<section id="inicio" class="view active"><h1>Inicio</h1><p class="sub">Resumen operativo</p><div id="stats" class="stats"></div><div class="card" style="margin-top:12px"><h3>Requiere atención</h3><div id="alerts"></div></div></section>
+
+<section id="inmuebles" class="view"><div class="toolbar"><div><h1>Inmuebles</h1><p class="sub">Bodegas, locales y casas</p></div><button class="btn primary" id="newProp">+ Inmueble</button></div><div id="props" class="grid"></div></section>
+
+<section id="inquilinos" class="view"><div class="toolbar"><div><h1>Inquilinos</h1><p class="sub">Directorio, contratos, aval y depósitos</p></div><button class="btn primary" id="newTenant">+ Inquilino</button></div><div class="card"><table><thead><tr><th>Inquilino</th><th>Inmueble</th><th>Renta</th><th>Vence</th></tr></thead><tbody id="tenants"></tbody></table></div></section>
+
+<section id="pagos" class="view"><div class="toolbar"><div><h1>Pagos</h1><p class="sub">Cobranza y saldos</p></div><button class="btn primary" id="newPay">+ Pago</button></div><input id="period" type="month"><div class="card total-card click" id="totalReceivableCard"><div class="meta">Saldo total por cobrar del mes</div><div class="metric" id="totalReceivable">$0</div><div class="meta">Suma los saldos del mes seleccionado de todos los inmuebles</div></div><div class="card"><table><thead><tr><th>Inquilino</th><th>Inmueble</th><th>Renta</th><th>Pagado</th><th>Saldo del mes</th></tr></thead><tbody id="payments"></tbody></table></div></section>
+
+<section id="seguros" class="view"><div class="toolbar"><div><h1>Seguros</h1><p class="sub">Pólizas de coche, inmuebles, gastos médicos y vida</p></div><button class="btn primary" id="newInsurance">+ Póliza</button></div><div id="insuranceSummary" class="stats" style="margin-bottom:12px"></div><div id="insurancePolicies" class="grid"></div></section>
+
+<section id="mantenimiento" class="view"><div class="toolbar"><div><h1>Más / Otros</h1><p class="sub">Pendientes, reparaciones, documentos y tareas</p></div><button class="btn primary" id="newTask">+ Nueva tarea</button></div><div id="tasks" class="grid"></div></section>
+
+<section id="avisos" class="view"><div class="toolbar"><div><h1>🔔 Avisos</h1><p class="sub">Vencimientos y recordatorios de Seguros</p></div><button class="btn" id="closeNotifications">Cerrar</button></div><div id="notificationList" class="grid"></div></section>
+
+<section id="detalle" class="view"><div id="detail"></div></section>
+
+<section id="configuracion" class="view"><div class="toolbar"><div><h1>Configuración</h1><p class="sub">Cuenta, usuarios y preferencias</p></div><button class="btn" id="closeSettings">Cerrar</button></div><div class="card settings-list">
+<div class="row"><div><b>Sesión</b><div class="meta" id="sessionText">Sesión local activa</div></div><button class="btn" id="signOutBtn">Sign out</button></div>
+<div class="row"><div><b>Usuarios</b><div class="meta">Cuentas autorizadas para entrar a RentaControl</div></div><button class="btn" id="manageUsers">Administrar</button></div>
+<div class="row"><div><b>Permisos</b><div class="meta">Administrador, Cobranza, Mantenimiento o Consulta</div></div><button class="btn" id="managePerms">Ver roles</button></div>
+<div class="row"><div><b>Cambiar contraseña</b><div class="meta">Actualiza tu contraseña de acceso</div></div><button class="btn" id="changePass">Cambiar</button></div>
+<div class="row"><div><b>Idioma</b></div><select id="languageSel"><option value="es">Español</option><option value="en">English</option></select></div>
+<div class="row"><div><b>Moneda</b></div><select id="currencySel"><option value="MXN">Peso mexicano (MXN)</option><option value="USD">Dólar estadounidense (USD)</option></select></div>
+</div></section>
+</div>
+
+<nav><button data-v="inicio"><span>🏠</span>Inicio</button><button data-v="inmuebles"><span>🏢</span>Inmuebles</button><button data-v="inquilinos"><span>👥</span>Inquilinos</button><button data-v="pagos"><span>💰</span>Pagos</button><button data-v="seguros"><span>🛡️</span>Seguros</button><button data-v="mantenimiento"><span>☰</span>Más</button></nav>
+<div id="modal" class="modal"><form id="form" class="sheet"><h2 id="ft"></h2><div id="fields"></div><div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>
+
+<script type="module">
+let currentSession=null;
+const K='rentacontrol_v2',SK='rentacontrol_settings_v1',MO=()=>new Date().toISOString().slice(0,7),TD=()=>new Date().toISOString().slice(0,10);
+let CFG=JSON.parse(localStorage.getItem(SK)||'null')||{language:'es',currency:'MXN',signedIn:true,users:[{id:'u1',name:'Administrador',role:'Administrador'}],password:'1234'};
+let S=JSON.parse(localStorage.getItem(K)||'null')||{properties:[],tenants:[],contracts:[],payments:[],credits:[],maintenance:[],insurance:[],agenda:[]};
+for(const k of ['properties','tenants','contracts','payments','credits','maintenance','insurance'])S[k]=S[k]||[];
+S.tenants.forEach(t=>{t.guarantor=t.guarantor||{name:'',phones:'',email:'',address:'',propertyType:'',propertyAddress:''};if(t.securityDeposit===undefined)t.securityDeposit=null});
+S.insurance.forEach(p=>{if(!Array.isArray(p.reminderDays))p.reminderDays=[30,15,7,1]});
+const M=n=>new Intl.NumberFormat(CFG.language==='en'?'en-US':'es-MX',{style:'currency',currency:CFG.currency,maximumFractionDigits:0}).format(+n||0);
+const P=i=>S.properties.find(x=>x.id===i),T=i=>S.tenants.find(x=>x.id===i),C=i=>S.contracts.find(x=>x.id===i),A=()=>S.contracts.filter(x=>x.status==='Vigente'),ID=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const isAdmin=()=>currentSession?.role==="Administrador";
+const isMaintenance=()=>currentSession?.role==="Mantenimiento";
+const canWrite=()=>!!currentSession && currentSession.role!=="Consulta";
+function guardWrite(){
+  if(canWrite())return true;
+  alert("Tu perfil es de solo consulta. No tienes permiso para modificar información.");
+  return false;
+}
+function applyRoleUI(){
+  const role=currentSession?.role||"";
+  const readonly=role==="Consulta";
+  ["newProp","newTenant","newPay","newInsurance"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.style.display=(readonly||role==="Mantenimiento")?"none":"";
+  });
+  const taskButton=document.getElementById("newTask");
+  if(taskButton)taskButton.style.display=readonly?"none":"";
+  if(manageUsers)manageUsers.style.display=isAdmin()?"":"none";
+  if(managePerms)managePerms.style.display=isAdmin()?"":"none";
+  if(notificationsBtn)notificationsBtn.style.display=role==="Mantenimiento"?"none":"";
+  document.querySelectorAll("nav button").forEach(btn=>{
+    if(role==="Mantenimiento")btn.style.display=btn.dataset.v==="mantenimiento"?"block":"none";
+    else btn.style.display="";
+  });
+  if(role==="Mantenimiento"){
+    const active=document.querySelector(".view.active")?.id;
+    if(active && !["mantenimiento","configuracion","detalle"].includes(active))show("mantenimiento");
+  }
+}
+
+let prev='inicio',FT='',E=null,CTX=null,syncTimer;
+
+function badge(ok,txt){cloudState.className='cloud '+(ok===true?'ok':ok===false?'bad':'');cloudState.textContent=txt}
+function hasData(x){return !!(x&&(x.properties?.length||x.tenants?.length||x.contracts?.length||x.payments?.length||x.credits?.length||x.maintenance?.length||x.insurance?.length))}
+async function cloudFetch(url,options={}){
+  const r=await fetch(url,{...options,credentials:"same-origin",cache:"no-store"});
+  if(r.status===401)throw new Error("AUTH_REQUIRED");
+  if(r.status===403){
+    const j=await r.clone().json().catch(()=>({}));
+    const e=new Error(j.error||"No tienes permiso para realizar esta acción.");
+    e.code="FORBIDDEN";
+    throw e;
+  }
+  return r;
+}
+async function loadCloud(){try{let r=await cloudFetch('/api/state');if(!r.ok)throw new Error(await r.text());let j=await r.json();if(j.user)currentSession=j.user;pendingCloudSync=false;syncAttempts=0;badge(true,'☁️ Nube');return j.state}catch(e){console.warn(e);if(e.message==="AUTH_REQUIRED")showAuth("Tu sesión expiró. Inicia sesión nuevamente.");else if(e.code==="FORBIDDEN")alert(e.message);else{badge(false,'⏳ Esperando nube');pendingCloudSync=true}return null}}
+let pendingCloudSync=false,syncAttempts=0;
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function saveCloud(){
+  pendingCloudSync=true;
+  badge(null,'☁️ Guardando...');
+  try{
+    let lastError=null;
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        const r=await cloudFetch('/api/state',{
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({state:S})
+        });
+        if(!r.ok){
+          let detail='';
+          try{const j=await r.json();detail=j.error||j.detail||''}catch{detail=await r.text()}
+          throw new Error(detail||`Error ${r.status} al guardar en la nube.`);
+        }
+        const j=await r.json();
+        S=j.state;
+        if(j.user)currentSession=j.user;
+        localStorage.setItem(K,JSON.stringify(S));
+        pendingCloudSync=false;
+        syncAttempts=0;
+        badge(true,'☁️ Nube');
+        render();
+        return true;
+      }catch(e){
+        lastError=e;
+        if(e.message==="AUTH_REQUIRED"||e.code==="FORBIDDEN")throw e;
+        if(attempt<2)await wait(700*(attempt+1));
+      }
+    }
+    throw lastError||new Error("No fue posible sincronizar.");
+  }catch(e){
+    console.warn("RentaControl sync:",e);
+    if(e.message==="AUTH_REQUIRED"){
+      pendingCloudSync=false;
+      showAuth("Tu sesión expiró. Inicia sesión nuevamente.");
+    }else if(e.code==="FORBIDDEN"){
+      pendingCloudSync=false;
+      alert(e.message);
+      const fresh=await loadCloud();
+      if(fresh){S=fresh;localStorage.setItem(K,JSON.stringify(S));render()}
+    }else{
+      pendingCloudSync=true;
+      syncAttempts++;
+      badge(false,'⏳ Pendiente de sincronizar');
+      if(syncAttempts===1){
+        console.warn("La nube rechazó temporalmente el estado; RentaControl reintentará con normalización del servidor.");
+      }
+      clearTimeout(syncTimer);
+      syncTimer=setTimeout(()=>{if(pendingCloudSync&&navigator.onLine)saveCloud()},Math.min(15000,2500*syncAttempts));
+    }
+    return false;
+  }
+}
+function saveCfg(){localStorage.setItem(SK,JSON.stringify(CFG));render()}
+function save(){
+  // Copia temporal para no perder lo capturado si la señal cambia.
+  // Neon sigue siendo la fuente autoritativa cuando la sincronización concluye.
+  localStorage.setItem(K,JSON.stringify(S));
+  render();
+  pendingCloudSync=true;
+  badge(null,'☁️ Guardando...');
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(saveCloud,250);
+}
+window.addEventListener('online',()=>{if(pendingCloudSync)saveCloud()});
+function show(v){prev=document.querySelector('.view.active')?.id||prev;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById(v).classList.add('active');scrollTo(0,0)}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{show(b.dataset.v);render()});
+function opts(a,f,s=''){return a.map(x=>`<option value="${x.id}" ${x.id===s?'selected':''}>${f(x)}</option>`).join('')}
+function monthRange(start,end){if(!start)return[];let out=[],d=new Date(start.slice(0,7)+'-01T12:00:00'),e=new Date(end.slice(0,7)+'-01T12:00:00');while(d<=e){out.push(d.toISOString().slice(0,7));d.setMonth(d.getMonth()+1)}return out}
+function paidFor(c,per){return S.payments.filter(p=>p.contractId===c.id&&p.period===per).reduce((a,b)=>a+(+b.amount||0),0)}
+function account(c){let run=0,rows=[];monthRange(c.start,TD()).forEach(per=>{let ch=+c.rent||0,pa=paidFor(c,per);run+=ch-pa;rows.push({per,ch,pa,run})});let cr=S.credits.filter(x=>x.contractId===c.id);cr.forEach(x=>{run-=+x.amount||0;rows.push({per:'Pago a cuenta',ch:0,pa:+x.amount||0,run,credit:true})});return{rows,balance:run,credit:cr.reduce((a,b)=>a+(+b.amount||0),0)}}
+function totals(per){
+  return A().map(c=>{
+    const paid=paidFor(c,per);
+    const monthlyBalance=(+c.rent||0)-paid;
+    return {c,paid,bal:monthlyBalance};
+  });
+}
+function totalReceivableFn(per=period.value||MO()){
+  return totals(per).reduce((sum,x)=>sum+Math.max(0,x.bal),0);
+}
+
+
+
+function daysUntil(dateStr){
+  if(!dateStr)return null;
+  return Math.ceil((new Date(dateStr+"T12:00:00")-new Date(TD()+"T12:00:00"))/86400000);
+}
+function insuranceNotifications(){
+  const out=[];
+  for(const p of (S.insurance||[])){
+    if(!p.validTo)continue;
+    const days=daysUntil(p.validTo);
+    const reminders=Array.isArray(p.reminderDays)&&p.reminderDays.length?p.reminderDays:[30,15,7,1];
+    if(days<0)out.push({id:p.id,days,title:`Póliza vencida: ${p.type}`,message:`${p.company} · ${p.policyNumber} venció el ${p.validTo}`,level:"danger"});
+    else if(reminders.includes(days))out.push({id:p.id,days,title:`Póliza por vencer: ${p.type}`,message:`${p.company} · ${p.policyNumber} vence en ${days} día${days===1?"":"s"}`,level:days<=7?"danger":"warn"});
+    else if(days<=30)out.push({id:p.id,days,title:`Próximo vencimiento: ${p.type}`,message:`${p.company} · ${p.policyNumber} vence en ${days} día${days===1?"":"s"}`,level:"warn"});
+  }
+  return out.sort((a,b)=>a.days-b.days);
+}
+function renderNotifications(){
+  const notices=insuranceNotifications();
+  notificationCount.textContent=notices.length>99?"99+":String(notices.length);
+  notificationCount.style.display=notices.length?"block":"none";
+  notificationList.innerHTML=notices.map(n=>`<div class="card click" data-notice="${n.id}"><div class="row"><div><b>${n.title}</b><div class="meta">${n.message}</div></div><span class="pill ${n.level}">${n.days<0?"Vencida":n.days===0?"Hoy":n.days+" d"}</span></div><div class="meta">Toca para abrir la póliza</div></div>`).join("")||'<div class="card"><b>Todo al día</b><div class="meta">No hay pólizas próximas a vencer.</div></div>';
+  document.querySelectorAll("[data-notice]").forEach(el=>el.onclick=()=>insuranceDetail(el.dataset.notice));
+}
+
+function insuranceStatus(p){
+  if(!p.validTo)return {label:"Sin vencimiento",cls:""};
+  const days=Math.ceil((new Date(p.validTo+"T12:00:00")-new Date(TD()+"T12:00:00"))/86400000);
+  if(days<0)return {label:"Vencida",cls:"danger"};
+  if(days<=30)return {label:`Vence en ${days} días`,cls:"warn"};
+  return {label:"Vigente",cls:"ok"};
+}
+function insuranceTypeIcon(t){return t==="Coche"?"🚗":t==="Inmueble"?"🏠":t==="Gastos médicos"?"🩺":"❤️"}
+function renderInsurance(){
+  const a=S.insurance||[], active=a.filter(x=>insuranceStatus(x).label!=="Vencida").length,
+        soon=a.filter(x=>insuranceStatus(x).cls==="warn").length, total=a.reduce((s,x)=>s+(+x.cost||0),0);
+  insuranceSummary.innerHTML=`<div class="card"><div class="meta">Pólizas</div><div class="metric">${a.length}</div></div>
+  <div class="card"><div class="meta">Vigentes</div><div class="metric">${active}</div></div>
+  <div class="card"><div class="meta">Por vencer</div><div class="metric">${soon}</div></div>
+  <div class="card"><div class="meta">Costo registrado</div><div class="metric">${M(total)}</div></div>`;
+  insurancePolicies.innerHTML=a.map(p=>{const st=insuranceStatus(p);return `<div class="card click" data-ins="${p.id}">
+    <div class="row"><div><b>${insuranceTypeIcon(p.type)} ${p.type}</b><div class="meta">${p.company}</div></div><span class="pill ${st.cls}">${st.label}</span></div>
+    <div class="meta">Póliza</div><b>${p.policyNumber||"—"}</b>
+    <div class="meta" style="margin-top:8px">Vigencia</div><div>${p.validFrom||"—"} → ${p.validTo||"—"}</div>
+    <div class="meta" style="margin-top:8px">Beneficiario</div><div>${p.beneficiary||"—"}</div>
+    <div class="meta" style="margin-top:8px">Costo</div><b>${M(p.cost)}</b></div>`}).join("")||'<div class="card"><span class="meta">Aún no hay pólizas registradas.</span></div>';
+  document.querySelectorAll("[data-ins]").forEach(x=>x.onclick=()=>insuranceDetail(x.dataset.ins));
+}
+function insuranceForm(id=null){
+  if(isMaintenance()){alert("Tu perfil de Mantenimiento trabaja únicamente en Otros.");return}
+  if(!guardWrite())return;
+  const p=id?(S.insurance||[]).find(x=>x.id===id):null;
+  FT="insurance";E=id;CTX={view:"seguros"};ft.textContent=p?"Editar póliza":"Nueva póliza de seguro";
+  fields.innerHTML=`<div class="two">
+  <label>Tipo de seguro<select name="type" required>${["Coche","Inmueble","Gastos médicos","Vida"].map(x=>`<option ${p?.type===x?"selected":""}>${x}</option>`).join("")}</select></label>
+  <label>Compañía<input name="company" value="${p?.company||""}" required></label>
+  <label>Número de póliza<input name="policyNumber" value="${p?.policyNumber||""}" required></label>
+  <label>Beneficiario<input name="beneficiary" value="${p?.beneficiary||""}"></label>
+  <label>Inicio de vigencia<input type="date" name="validFrom" value="${p?.validFrom||""}"></label>
+  <label>Fin de vigencia<input type="date" name="validTo" value="${p?.validTo||""}"></label>
+  <label>Costo<input type="number" min="0" step="0.01" name="cost" value="${p?.cost??0}" required></label></div>
+  <label>Recordarme antes del vencimiento</label><div class="info-box" style="display:flex;gap:14px;flex-wrap:wrap">${[30,15,7,1].map(day=>`<label style="display:flex;align-items:center;gap:6px;margin:0;color:var(--t)"><input type="checkbox" name="reminder_${day}" style="width:auto;margin:0" ${(p?.reminderDays||[30,15,7,1]).includes(day)?"checked":""}> ${day} día${day===1?"":"s"} antes</label>`).join("")}</div>
+  <label>Notas<textarea name="notes" rows="3">${p?.notes||""}</textarea></label>`;
+  modal.classList.add("on");
+}
+function insuranceDetail(id){
+  const p=(S.insurance||[]).find(x=>x.id===id);if(!p)return;const st=insuranceStatus(p);
+  detail.innerHTML=`<button class="btn" id="backIns">← Seguros</button><div class="card" style="margin-top:12px">
+  <div class="row"><div><h2 style="margin:0">${insuranceTypeIcon(p.type)} ${p.type}</h2><div class="meta">${p.company}</div></div><span class="pill ${st.cls}">${st.label}</span></div>
+  <div class="row"><span>Número de póliza</span><b>${p.policyNumber||"—"}</b></div>
+  <div class="row"><span>Vigencia</span><b>${p.validFrom||"—"} → ${p.validTo||"—"}</b></div>
+  <div class="row"><span>Beneficiario</span><b>${p.beneficiary||"—"}</b></div>
+  <div class="row"><span>Costo</span><b>${M(p.cost)}</b></div><div class="row"><span>Recordatorios</span><b>${(p.reminderDays||[30,15,7,1]).join(", ")} días antes</b></div>${p.notes?`<div class="info-box">${p.notes}</div>`:""}
+  ${currentSession?.role==="Consulta"?"":`<div class="actions"><button class="btn" id="editIns">Editar</button><button class="btn danger" id="deleteIns">Eliminar</button></div>`}</div>`;
+  show("detalle");backIns.onclick=()=>{show("seguros");render()};
+  if(document.getElementById("editIns"))editIns.onclick=()=>insuranceForm(id);
+  if(document.getElementById("deleteIns"))deleteIns.onclick=()=>{if(confirm("¿Eliminar esta póliza?")){S.insurance=S.insurance.filter(x=>x.id!==id);save();show("seguros")}};
+}
+
+function render(){
+ let per=period.value||MO(),r=totals(per),exp=r.reduce((a,b)=>a+(+b.c.rent||0),0),pd=r.reduce((a,b)=>a+b.paid,0),ov=r.filter(x=>x.bal>0&&new Date().getDate()>(+x.c.dueDay||5)),occ=S.properties.filter(x=>x.status==='Rentada').length;
+ stats.innerHTML=[['Esperado',M(exp),'e'],['Cobrado',M(pd),'c'],['Pendiente',M(r.reduce((a,b)=>a+Math.max(0,b.bal),0)),'p'],['Pagos vencidos',ov.length,'v'],['Ocupación',Math.round(100*occ/(S.properties.length||1))+'%','o']].map(x=>`<div class="card click" data-m="${x[2]}"><div class="meta">${x[0]}</div><div class="metric">${x[1]}</div><div class="meta">Toca para ver detalle</div></div>`).join('');
+ document.querySelectorAll('[data-m]').forEach(x=>x.onclick=()=>metric(x.dataset.m));
+ alerts.innerHTML=ov.map(x=>`<div class="row click" data-c="${x.c.id}"><div><b>${T(x.c.tenantId)?.name||''}</b><div class="meta">${P(x.c.propertyId)?.name||''}</div></div><b>${M(x.bal)}</b></div>`).join('')||'<span class="meta">Sin pagos vencidos</span>';
+ document.querySelectorAll('#alerts [data-c]').forEach(x=>x.onclick=()=>acct(x.dataset.c));
+ props.innerHTML=S.properties.map(p=>{let c=A().find(c=>c.propertyId===p.id),t=c?T(c.tenantId):null;return `<div class="card click" data-p="${p.id}"><h3>${p.name}</h3><div class="meta">${p.type||''} · ${p.address||''}</div><p>${M(p.rent)} / mes</p><div class="meta">${t?t.name:'Sin inquilino'}</div></div>`}).join('');
+ document.querySelectorAll('#props [data-p]').forEach(x=>x.onclick=()=>pdeta(x.dataset.p));
+ tenants.innerHTML=S.tenants.map(t=>{let c=A().find(c=>c.tenantId===t.id),p=c?P(c.propertyId):null;return `<tr class="click" data-t="${t.id}"><td><b>${t.name}</b></td><td>${p?p.name:'—'}</td><td>${c?M(c.rent):'—'}</td><td>${c?c.end:'—'}</td></tr>`}).join('');
+ document.querySelectorAll('#tenants [data-t]').forEach(x=>x.onclick=()=>tdeta(x.dataset.t));
+ payments.innerHTML=r.map(x=>`<tr class="click" data-c="${x.c.id}"><td>${T(x.c.tenantId)?.name||''}</td><td>${P(x.c.propertyId)?.name||''}</td><td>${M(x.c.rent)}</td><td>${M(x.paid)}</td><td>${M(x.bal)}</td></tr>`).join('');
+ document.querySelectorAll('#payments [data-c]').forEach(x=>x.onclick=()=>acct(x.dataset.c));
+ totalReceivable.textContent=M(totalReceivableFn(per));
+ tasks.innerHTML=S.maintenance.map(m=>`<div class="card click" data-task="${m.id}"><div class="row"><div><b>${m.title||'Tarea'}</b><div class="meta">${m.type||'Otro'}${m.propertyId?' · '+(P(m.propertyId)?.name||''):''}${m.tenantId?' · '+(T(m.tenantId)?.name||''):''}</div></div><span class="pill ${m.status==='Terminada'?'ok':m.status==='En proceso'?'warn':'danger'}">${m.status||'Pendiente'}</span></div><div class="meta">${m.date||'Sin fecha'}${m.responsible?' · '+m.responsible:''}</div></div>`).join('')||'<div class="card"><div class="meta">No hay tareas registradas.</div></div>';
+ document.querySelectorAll('[data-task]').forEach(x=>x.onclick=()=>taskDetail(x.dataset.task));
+ languageSel.value=CFG.language;currencySel.value=CFG.currency;sessionText.textContent=currentSession?.email?`Conectado: ${currentSession.email} · ${currentSession.role||''}`:'Sesión segura';signOutBtn.textContent='Sign out';applyRoleUI();
+}
+
+function metric(k){let r=totals(MO()),title='',body='';
+ if(k==='c'){title='Cobros del mes';body=S.payments.filter(x=>x.period===MO()).map(x=>{let c=C(x.contractId);return `<div class="row click" data-c="${c?.id||''}"><div><b>${T(c?.tenantId)?.name||''}</b><div class="meta">${P(c?.propertyId)?.name||''} · ${x.date||''}</div></div><b>${M(x.amount)}</b></div>`}).join('')}
+ if(k==='v'||k==='p'){title=k==='v'?'Pagos vencidos':'Pagos pendientes';body=r.filter(x=>x.bal>0&&(k!=='v'||new Date().getDate()>(+x.c.dueDay||5))).map(x=>`<div class="row click" data-c="${x.c.id}"><div><b>${T(x.c.tenantId)?.name||''}</b><div class="meta">${P(x.c.propertyId)?.name||''}</div></div><b>${M(x.bal)}</b></div>`).join('')}
+ if(k==='e'){title='Rentas esperadas';body=r.map(x=>`<div class="row click" data-c="${x.c.id}"><b>${T(x.c.tenantId)?.name||''}</b><b>${M(x.c.rent)}</b></div>`).join('')}
+ if(k==='o'){title='Ocupación';body=S.properties.map(p=>`<div class="row click" data-p="${p.id}"><b>${p.name}</b><span class="pill">${p.status||'Disponible'}</span></div>`).join('')}
+ detail.innerHTML=`<button class="btn" id="backMetric">← Inicio</button><div class="card" style="margin-top:12px"><h2>${title}</h2>${body||'<span class="meta">Sin registros</span>'}</div>`;show('detalle');backMetric.onclick=()=>show('inicio');document.querySelectorAll('#detail [data-c]').forEach(x=>x.onclick=()=>acct(x.dataset.c));document.querySelectorAll('#detail [data-p]').forEach(x=>x.onclick=()=>pdeta(x.dataset.p))
+}
+function totalReceivableDetail(){
+  const per=period.value||MO();
+  let rows=totals(per).map(x=>({c:x.c,balance:Math.max(0,x.bal)})).filter(x=>x.balance>0);
+  detail.innerHTML=`<button class="btn" id="backTotal">← Pagos</button><div class="card" style="margin-top:12px"><h2>Saldo total por cobrar</h2><div class="meta">${new Date(per+'-01T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'})}</div><div class="metric">${M(totalReceivableFn(per))}</div>${rows.map(x=>`<div class="row click" data-c="${x.c.id}"><div><b>${T(x.c.tenantId)?.name||''}</b><div class="meta">${P(x.c.propertyId)?.name||''}</div></div><b>${M(x.balance)}</b></div>`).join('')||'<span class="meta">Sin saldos pendientes</span>'}</div>`;
+  show('detalle');
+  backTotal.onclick=()=>show('pagos');
+  document.querySelectorAll('#detail [data-c]').forEach(x=>x.onclick=()=>acct(x.dataset.c));
+}
+function pdeta(i){let p=P(i);if(!p)return;let c=A().find(c=>c.propertyId===i),t=c?T(c.tenantId):null;detail.innerHTML=`<button class="btn" id="bp">← Inmuebles</button><div class="card" style="margin-top:12px"><h2>${p.name}</h2><div class="meta">${p.type||''} · ${p.address||''}</div><div class="row"><span>Inquilino</span><b>${t?t.name:'—'}</b></div><div class="row"><span>Renta</span><b>${M(p.rent)}</b></div><div class="row"><span>Contrato vence</span><b>${c?c.end:'—'}</b></div><div class="actions" style="justify-content:flex-start">${canWrite()?'<button class="btn primary" id="ep">Editar inmueble / vínculo</button>':''}${t?'<button class="btn" id="got">Ver inquilino</button>':''}</div></div>`;show('detalle');bp.onclick=()=>show('inmuebles');if(document.getElementById('ep'))ep.onclick=()=>propertyForm(i);if(t)got.onclick=()=>tdeta(t.id)}
+function tdeta(i){let t=T(i);if(!t)return;let c=A().find(c=>c.tenantId===i),p=c?P(c.propertyId):null,g=t.guarantor||{},dep=t.securityDeposit==null?(c?c.rent:0):t.securityDeposit;detail.innerHTML=`<button class="btn" id="bt">← Inquilinos</button><div class="card" style="margin-top:12px"><h2>${t.name}</h2><div class="meta">${t.phone||''}${t.email?' · '+t.email:''}</div><div class="row"><span>Inmueble</span><b>${p?p.name:'—'}</b></div><div class="row"><span>Renta</span><b>${c?M(c.rent):'—'}</b></div><div class="row"><span>Contrato vence</span><b>${c?c.end:'—'}</b></div><div class="info-box"><h3 style="margin-top:0">Depósito en garantía</h3><div class="metric">${M(dep)}</div></div><div class="info-box"><h3 style="margin-top:0">Aval</h3><div class="row"><span>Nombre</span><b>${g.name||'—'}</b></div><div class="row"><span>Teléfonos</span><b>${g.phones||'—'}</b></div><div class="row"><span>Correo</span><b>${g.email||'—'}</b></div><div class="row"><span>Dirección</span><b>${g.address||'—'}</b></div><div class="row"><span>Propiedad en garantía</span><b>${g.propertyType||'—'}</b></div><div class="row"><span>Dirección propiedad</span><b>${g.propertyAddress||'—'}</b></div></div><div class="actions" style="justify-content:flex-start">${canWrite()?'<button class="btn primary" id="et">Editar inquilino / vínculo / aval</button>':''}${p?'<button class="btn" id="gop">Ver inmueble</button>':''}</div></div>`;show('detalle');bt.onclick=()=>show('inquilinos');if(document.getElementById('et'))et.onclick=()=>tenantForm(i);if(p)gop.onclick=()=>pdeta(p.id)}
+function acct(cid){let c=C(cid);if(!c)return;let t=T(c.tenantId),p=P(c.propertyId),a=account(c);detail.innerHTML=`<button class="btn" id="backPay">← Pagos</button><div class="card" style="margin-top:12px"><h2>${t?.name||''}</h2><div class="meta">${p?.name||''}</div><div class="row"><span>Renta mensual</span><b>${M(c.rent)}</b></div><div class="row"><span>Saldo acumulado</span><b>${M(a.balance)}</b></div><div class="row"><span>Anticipos / pagos a cuenta</span><b>${M(a.credit)}</b></div><div class="actions" style="justify-content:flex-start">${canWrite()?'<button class="btn primary" id="addPay">+ Pago mensual</button><button class="btn" id="addCredit">+ Pago a cuenta</button>':''}<button class="btn" id="goTenant">Ver inquilino</button></div></div><div class="card" style="margin-top:12px"><h3>Estado de cuenta mensual</h3><table><thead><tr><th>Mes</th><th>Renta</th><th>Pagos</th><th>Saldo acumulado</th></tr></thead><tbody>${a.rows.map(r=>`<tr><td>${r.per}</td><td>${r.credit?'—':M(r.ch)}</td><td>${M(r.pa)}</td><td>${M(r.run)}</td></tr>`).join('')}</tbody></table></div>`;show('detalle');backPay.onclick=()=>show('pagos');if(document.getElementById('addPay'))addPay.onclick=()=>payForm(cid);if(document.getElementById('addCredit'))addCredit.onclick=()=>creditForm(cid);goTenant.onclick=()=>tdeta(c.tenantId)}
+function taskDetail(id){let m=S.maintenance.find(x=>x.id===id);if(!m)return;detail.innerHTML=`<button class="btn" id="backTask">← Más / Otros</button><div class="card" style="margin-top:12px"><div class="row"><div><h2 style="margin:0">${m.title||'Tarea'}</h2><div class="meta">${m.type||'Otro'}</div></div><span class="pill ${m.status==='Terminada'?'ok':m.status==='En proceso'?'warn':'danger'}">${m.status||'Pendiente'}</span></div><div class="row"><span>Inmueble</span><b>${m.propertyId?(P(m.propertyId)?.name||'—'):'—'}</b></div><div class="row"><span>Inquilino</span><b>${m.tenantId?(T(m.tenantId)?.name||'—'):'—'}</b></div><div class="row"><span>Responsable</span><b>${m.responsible||'—'}</b></div><div class="row"><span>Fecha</span><b>${m.date||'—'}</b></div><div style="padding:12px 0"><div class="meta">Notas / avance</div><div style="margin-top:5px">${m.notes||'Sin notas'}</div></div><div class="actions" style="justify-content:flex-start">${canWrite()?`<button class="btn primary" id="editTask">Editar tarea</button><button class="btn" id="toggleTask">${m.status==='Terminada'?'Reabrir':'Marcar terminada'}</button>`:''}</div></div>`;show('detalle');backTask.onclick=()=>show('mantenimiento');if(document.getElementById('editTask'))editTask.onclick=()=>taskForm(id);if(document.getElementById('toggleTask'))toggleTask.onclick=()=>{m.status=m.status==='Terminada'?'Pendiente':'Terminada';save();taskDetail(id)}}
+
+function propertyForm(i=null){if(isMaintenance()){alert('Tu perfil de Mantenimiento trabaja únicamente en Otros.');return}if(!guardWrite())return;FT='property';E=i;let p=i?P(i):{},c=i?A().find(x=>x.propertyId===i):null;CTX={view:document.querySelector('.view.active').id,id:i};ft.textContent=i?'Editar inmueble / vínculo':'Nuevo inmueble';fields.innerHTML=`<label>Nombre<input name="name" value="${p.name||''}" required></label><div class="two"><label>Tipo<select name="type"><option ${p.type==='Bodega'?'selected':''}>Bodega</option><option ${p.type==='Local'?'selected':''}>Local</option><option ${p.type==='Casa'?'selected':''}>Casa</option></select></label><label>Dirección<input name="address" value="${p.address||''}"></label><label>Renta<input type="number" name="rent" value="${p.rent||''}"></label><label>Depósito<input type="number" name="deposit" value="${p.deposit||''}"></label></div><hr><h3>Inquilino y contrato</h3><label>Inquilino<select name="tenantId"><option value="">Sin inquilino</option>${opts(S.tenants,x=>x.name,c?.tenantId||'')}</select></label><div class="two"><label>Inicio<input type="date" name="start" value="${c?.start||''}"></label><label>Vencimiento<input type="date" name="end" value="${c?.end||''}"></label><label>Día de pago<input type="number" name="dueDay" value="${c?.dueDay||5}"></label></div>`;modal.classList.add('on')}
+function tenantForm(i=null){if(isMaintenance()){alert('Tu perfil de Mantenimiento trabaja únicamente en Otros.');return}if(!guardWrite())return;FT='tenant';E=i;let t=i?T(i):{guarantor:{}},g=t.guarantor||{},c=i?A().find(x=>x.tenantId===i):null,available=S.properties.filter(p=>!A().some(x=>x.propertyId===p.id)||p.id===c?.propertyId);CTX={view:document.querySelector('.view.active').id,id:i};ft.textContent=i?'Editar inquilino / vínculo / aval':'Nuevo inquilino';fields.innerHTML=`<label>Nombre<input name="name" value="${t.name||''}" required></label><div class="two"><label>Teléfono<input name="phone" value="${t.phone||''}"></label><label>Email<input name="email" value="${t.email||''}"></label></div><hr><h3>Inmueble y contrato</h3><label>Inmueble<select name="propertyId"><option value="">Sin inmueble</option>${opts(available,x=>x.name,c?.propertyId||'')}</select></label><div class="two"><label>Inicio<input type="date" name="start" value="${c?.start||''}"></label><label>Vencimiento<input type="date" name="end" value="${c?.end||''}"></label><label>Renta<input type="number" name="contractRent" value="${c?.rent||''}"></label><label>Día de pago<input type="number" name="dueDay" value="${c?.dueDay||5}"></label><label>Depósito en garantía<input type="number" name="securityDeposit" value="${t.securityDeposit==null?(c?.rent||''):t.securityDeposit}"></label></div><hr><h3>Aval</h3><div class="two"><label>Nombre<input name="guarantorName" value="${g.name||''}"></label><label>Teléfonos<input name="guarantorPhones" value="${g.phones||''}"></label><label>Correo<input type="email" name="guarantorEmail" value="${g.email||''}"></label><label>Dirección<input name="guarantorAddress" value="${g.address||''}"></label></div><h3>Propiedad en garantía (opcional)</h3><div class="two"><label>Tipo de inmueble<select name="guarantorPropertyType"><option value="">Sin propiedad</option><option ${g.propertyType==='Casa'?'selected':''}>Casa</option><option ${g.propertyType==='Terreno'?'selected':''}>Terreno</option><option ${g.propertyType==='Departamento'?'selected':''}>Departamento</option><option ${g.propertyType==='Oficina'?'selected':''}>Oficina</option></select></label><label>Dirección<input name="guarantorPropertyAddress" value="${g.propertyAddress||''}"></label></div>`;modal.classList.add('on')}
+function payForm(cid=''){
+  if(isMaintenance()){alert('Tu perfil de Mantenimiento trabaja únicamente en Otros.');return}
+  if(!guardWrite())return;
+  const contracts=A();
+  if(!contracts.length){alert('No hay contratos vigentes para registrar pagos.');return}
+  FT='pay';E=null;CTX={view:document.querySelector('.view.active').id,cid};
+  ft.textContent='Registrar pago mensual';
+  fields.innerHTML=`
+    <label>Aplicar pago a
+      <select name="cid" required>
+        <option value="">Selecciona inquilino / inmueble</option>
+        ${contracts.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${T(c.tenantId)?.name||'Sin inquilino'} — ${P(c.propertyId)?.name||'Sin inmueble'} — ${M(c.rent)}</option>`).join('')}
+      </select>
+    </label>
+    <div class="two">
+      <label>Periodo<input type="month" name="period" value="${period.value||MO()}" required></label>
+      <label>Monto<input type="number" name="amount" min="0" step="0.01" required></label>
+      <label>Fecha<input type="date" name="date" value="${TD()}" required></label>
+      <label>Método<select name="method"><option>Transferencia</option><option>Efectivo</option><option>Cheque</option></select></label>
+    </div>`;
+  modal.classList.add('on');
+}
+function creditForm(cid){if(isMaintenance()){alert('Tu perfil de Mantenimiento trabaja únicamente en Otros.');return}if(!guardWrite())return;FT='credit';E=null;CTX={view:document.querySelector('.view.active').id,cid};ft.textContent='Pago a cuenta / anticipo';fields.innerHTML=`<input type="hidden" name="cid" value="${cid}"><div class="two"><label>Monto<input type="number" name="amount"></label><label>Fecha<input type="date" name="date" value="${TD()}"></label></div><label>Nota<textarea name="note">Pago a cuenta</textarea></label>`;modal.classList.add('on')}
+function taskForm(i=null){if(!guardWrite())return;FT='task';E=i;let m=i?S.maintenance.find(x=>x.id===i):{};CTX={view:document.querySelector('.view.active').id,id:i};ft.textContent=i?'Editar tarea':'Nueva tarea';fields.innerHTML=`<label>Título<input name="title" value="${m.title||''}" required></label><div class="two"><label>Tipo<select name="type"><option ${m.type==='Reparación'?'selected':''}>Reparación</option><option ${m.type==='Documentos'?'selected':''}>Documentos</option><option ${m.type==='Visita'?'selected':''}>Visita</option><option ${m.type==='Cobranza'?'selected':''}>Cobranza</option><option ${m.type==='Firma'?'selected':''}>Firma</option><option ${!m.type||m.type==='Otro'?'selected':''}>Otro</option></select></label><label>Estado<select name="status"><option ${!m.status||m.status==='Pendiente'?'selected':''}>Pendiente</option><option ${m.status==='En proceso'?'selected':''}>En proceso</option><option ${m.status==='Terminada'?'selected':''}>Terminada</option></select></label><label>Inmueble<select name="propertyId"><option value="">Sin inmueble</option>${opts(S.properties,x=>x.name,m.propertyId||'')}</select></label><label>Inquilino<select name="tenantId"><option value="">Sin inquilino</option>${opts(S.tenants,x=>x.name,m.tenantId||'')}</select></label><label>Responsable<input name="responsible" value="${m.responsible||''}"></label><label>Fecha<input type="date" name="date" value="${m.date||TD()}"></label></div><label>Notas / avance<textarea name="notes" rows="5">${m.notes||''}</textarea></label>`;modal.classList.add('on')}
+
+form.onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target).entries());
+ if(FT==="password"){
+   if(d.newPassword!==d.confirmPassword){alert("Las nuevas contraseñas no coinciden.");return}
+   try{
+     await authRequest({action:"change_password",currentPassword:d.currentPassword,newPassword:d.newPassword});
+     modal.classList.remove("on");alert("Contraseña actualizada correctamente.");
+   }catch(err){alert(err.message)}
+   return;
+ }
+ if(FT==="user"){
+   try{
+     if(E){
+       await usersApi({action:"update",id:E,name:d.name,email:d.email,role:d.role,active:d.active==="true"});
+       if(d.tempPassword)await usersApi({action:"reset_password",id:E,password:d.tempPassword});
+     }else{
+       await usersApi({action:"create",name:d.name,email:d.email,role:d.role,password:d.tempPassword});
+     }
+     modal.classList.remove("on");await usersPage();
+   }catch(err){alert(err.message)}
+   return;
+ }
+ if(FT==='property'){let sid=E||ID('p'),p=E?P(E):{id:sid};Object.assign(p,{name:d.name,type:d.type,address:d.address,rent:+d.rent||0,deposit:+d.deposit||0,status:p.status||'Disponible'});if(!E)S.properties.push(p);let c=A().find(x=>x.propertyId===sid);if(d.tenantId&&d.start&&d.end){let other=A().find(x=>x.tenantId===d.tenantId&&x.id!==c?.id);if(other){let op=P(other.propertyId);if(op)op.status='Disponible';other.status='Terminado'}if(c)Object.assign(c,{tenantId:d.tenantId,start:d.start,end:d.end,rent:+d.rent||0,dueDay:+d.dueDay||5});else S.contracts.push({id:ID('c'),propertyId:sid,tenantId:d.tenantId,start:d.start,end:d.end,rent:+d.rent||0,dueDay:+d.dueDay||5,status:'Vigente'});p.status='Rentada'}else if(c&&!d.tenantId){c.status='Terminado';p.status='Disponible'}}
+ if(FT==='tenant'){let sid=E||ID('t'),t=E?T(E):{id:sid};Object.assign(t,{name:d.name,phone:d.phone,email:d.email,securityDeposit:d.securityDeposit===''?null:+d.securityDeposit,guarantor:{name:d.guarantorName||'',phones:d.guarantorPhones||'',email:d.guarantorEmail||'',address:d.guarantorAddress||'',propertyType:d.guarantorPropertyType||'',propertyAddress:d.guarantorPropertyAddress||''}});if(!E)S.tenants.push(t);let c=A().find(x=>x.tenantId===sid);if(d.propertyId&&d.start&&d.end){let p=P(d.propertyId),occupied=A().find(x=>x.propertyId===d.propertyId&&x.tenantId!==sid);if(occupied){occupied.status='Terminado'}if(c&&c.propertyId!==d.propertyId){let op=P(c.propertyId);if(op)op.status='Disponible';Object.assign(c,{propertyId:d.propertyId,start:d.start,end:d.end,rent:+d.contractRent||+p.rent||0,dueDay:+d.dueDay||5})}else if(c)Object.assign(c,{start:d.start,end:d.end,rent:+d.contractRent||+p.rent||0,dueDay:+d.dueDay||5});else S.contracts.push({id:ID('c'),propertyId:d.propertyId,tenantId:sid,start:d.start,end:d.end,rent:+d.contractRent||+p.rent||0,dueDay:+d.dueDay||5,status:'Vigente'});p.status='Rentada'}else if(c&&!d.propertyId){let op=P(c.propertyId);if(op)op.status='Disponible';c.status='Terminado'}}
+ if(FT==='pay'){
+   if(!d.cid){alert('Selecciona a qué inquilino / inmueble se aplicará el pago.');return}
+   S.payments.push({id:ID('x'),contractId:d.cid,period:d.period,amount:+d.amount||0,date:d.date,method:d.method,notes:''});
+ }
+ if(FT==='credit')S.credits.push({id:ID('cr'),contractId:d.cid,amount:+d.amount||0,date:d.date,note:d.note||'Pago a cuenta'});
+ if(FT==='insurance'){
+ const rec={id:E||ID('ins'),type:d.type,company:d.company.trim(),policyNumber:d.policyNumber.trim(),validFrom:d.validFrom||'',validTo:d.validTo||'',beneficiary:d.beneficiary.trim(),cost:+d.cost||0,reminderDays:[30,15,7,1].filter(day=>d['reminder_'+day]==='on'),notes:d.notes||''};
+ if(E){const i=S.insurance.findIndex(x=>x.id===E);if(i>=0)S.insurance[i]=rec}else S.insurance.push(rec);
+}
+if(FT==='task'){let rec={title:d.title,type:d.type,status:d.status,propertyId:d.propertyId||'',tenantId:d.tenantId||'',responsible:d.responsible||'',date:d.date||'',notes:d.notes||''};if(E)Object.assign(S.maintenance.find(x=>x.id===E),rec);else{E=ID('m');S.maintenance.push({id:E,...rec})}}
+ save();modal.classList.remove('on');if(FT==='property')pdeta(E||S.properties.at(-1).id);else if(FT==='tenant')tdeta(E||S.tenants.at(-1).id);else if(FT==='task')taskDetail(E);else acct(d.cid)
+};
+cancel.onclick=()=>{modal.classList.remove('on');if(FT==="user"&&CTX?.users){usersPage();return}if(FT==="password"){show("configuracion");return}if(CTX?.view==='detalle'){if(FT==='property'&&CTX.id)pdeta(CTX.id);else if(FT==='tenant'&&CTX.id)tdeta(CTX.id);else if((FT==='pay'||FT==='credit')&&CTX.cid)acct(CTX.cid);else if(FT==='task'&&CTX.id)taskDetail(CTX.id);else show(prev)}else show(CTX?.view||prev)};
+newProp.onclick=()=>{if(guardWrite())propertyForm()};newTenant.onclick=()=>{if(guardWrite())tenantForm()};newPay.onclick=()=>{if(!guardWrite())return;payForm()};newInsurance.onclick=()=>{if(guardWrite())insuranceForm()};newTask.onclick=()=>{if(guardWrite())taskForm()};totalReceivableCard.onclick=totalReceivableDetail;period.value=MO();period.onchange=render;
+
+async function usersApi(payload=null){
+  const opts=payload?{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify(payload)}:{credentials:"same-origin",cache:"no-store"};
+  const r=await fetch("/api/users",opts);
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||"No fue posible gestionar usuarios.");
+  return j;
+}
+async function usersPage(){
+  if(!isAdmin()){alert('Solo un Administrador puede gestionar usuarios.');return}
+  try{
+    const j=await usersApi();
+    detail.innerHTML=`<button class="btn" id="backUsers">← Configuración</button>
+    <div class="card" style="margin-top:12px"><div class="toolbar"><div><h2>Usuarios</h2><div class="meta">Administra quién puede entrar y qué rol tiene.</div></div><button class="btn primary" id="addUserBtn">+ Usuario</button></div>
+    ${j.users.map(u=>`<div class="row click" data-user="${u.id}"><div><b>${u.name}</b><div class="meta">${u.email||""} · ${u.role}</div></div><span class="pill ${u.active?'ok':'danger'}">${u.active?'Activo':'Desactivado'}</span></div>`).join("")}</div>`;
+    show("detalle");
+    backUsers.onclick=()=>show("configuracion");
+    addUserBtn.onclick=()=>userForm();
+    document.querySelectorAll("#detail [data-user]").forEach(x=>x.onclick=()=>userForm(x.dataset.user,j.users.find(u=>u.id===x.dataset.user)));
+  }catch(e){alert(e.message)}
+}
+function userForm(id=null,u=null){if(!isAdmin()){alert('Solo un Administrador puede gestionar usuarios.');return}
+  FT="user";E=id;CTX={view:"detalle",users:true};
+  ft.textContent=id?"Editar usuario":"Nuevo usuario";
+  fields.innerHTML=`<label>Nombre<input name="name" value="${u?.name||""}" required></label>
+  <label>Correo<input type="email" name="email" value="${u?.email||""}" required></label>
+  <label>Rol<select name="role">
+    ${["Administrador","Cobranza","Mantenimiento","Consulta"].map(r=>`<option ${u?.role===r?"selected":""}>${r}</option>`).join("")}
+  </select></label>
+  ${id?`<label>Estado<select name="active"><option value="true" ${u?.active?"selected":""}>Activo</option><option value="false" ${!u?.active?"selected":""}>Desactivado</option></select></label>
+  <label>Nueva contraseña temporal (opcional)<input type="password" name="tempPassword" minlength="8"></label>`:
+  `<label>Contraseña temporal<input type="password" name="tempPassword" minlength="8" required></label>`}`;
+  modal.classList.add("on");
+}
+function rolesPage(){
+  detail.innerHTML=`<button class="btn" id="backRoles">← Configuración</button><div class="card" style="margin-top:12px"><h2>Permisos por rol</h2>
+  <div class="info-box"><b>Administrador</b><div class="meta">Acceso completo, usuarios, permisos, pagos y configuración.</div></div>
+  <div class="info-box"><b>Cobranza</b><div class="meta">Puede consultar y actualizar la operación, incluyendo pagos y estados de cuenta.</div></div>
+  <div class="info-box"><b>Mantenimiento</b><div class="meta">Puede consultar y actualizar la operación y las tareas de mantenimiento.</div></div>
+  <div class="info-box"><b>Consulta</b><div class="meta">Puede ver la información, pero la API bloquea modificaciones.</div></div></div>`;
+  show("detalle");backRoles.onclick=()=>show("configuracion");
+}
+function passwordForm(){
+  FT="password";E=null;CTX={view:"configuracion"};
+  ft.textContent="Cambiar contraseña";
+  fields.innerHTML=`<label>Contraseña actual<input type="password" name="currentPassword" required></label>
+  <label>Nueva contraseña<input type="password" name="newPassword" minlength="8" required></label>
+  <label>Confirmar nueva contraseña<input type="password" name="confirmPassword" minlength="8" required></label>`;
+  modal.classList.add("on");
+}
+
+settingsBtn.onclick=()=>show('configuracion');closeSettings.onclick=()=>show(prev==='configuracion'?'inicio':prev);languageSel.onchange=()=>{CFG.language=languageSel.value;saveCfg()};currencySel.onchange=()=>{CFG.currency=currencySel.value;saveCfg()};signOutBtn.onclick=async()=>{await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({action:"logout"})});currentSession=null;showAuth("Sesión cerrada.");};
+manageUsers.onclick=usersPage;
+managePerms.onclick=rolesPage;
+changePass.onclick=passwordForm;
+
+
+
+let authMode="login";
+function setAuthMode(mode){
+  authMode=mode;
+  nameWrap.style.display=mode==="signup"?"block":"none";
+  authSubmit.textContent=mode==="signup"?"Crear cuenta":"Entrar";
+  tabLogin.classList.toggle("primary",mode==="login");
+  tabSignup.classList.toggle("primary",mode==="signup");
+  authPassword.autocomplete=mode==="signup"?"new-password":"current-password";
+  authMsg.className="auth-msg";
+  authMsg.textContent=mode==="signup"?"Crea la cuenta inicial usando el correo autorizado en Vercel.":"Usa tu cuenta autorizada para RentaControl.";
+}
+function showAuth(message=""){
+  authGate.classList.remove("hidden");
+  document.querySelector(".app").style.visibility="hidden";
+  document.querySelector("nav").style.visibility="hidden";
+  if(message){authMsg.className="auth-msg err";authMsg.textContent=message}
+}
+function hideAuth(){
+  authGate.classList.add("hidden");
+  document.querySelector(".app").style.visibility="visible";
+  document.querySelector("nav").style.visibility="visible";
+}
+tabLogin.onclick=()=>setAuthMode("login");
+tabSignup.onclick=()=>setAuthMode("signup");
+forgotPasswordBtn.onclick=async()=>{
+  const email=(authEmail.value||"").trim();
+  if(!email){authMsg.className="auth-msg err";authMsg.textContent="Escribe primero tu correo.";return}
+  forgotPasswordBtn.disabled=true;
+  authMsg.className="auth-msg";authMsg.textContent="Enviando instrucciones...";
+  try{
+    const r=await fetch("/api/reset-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"request",email})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||"No fue posible enviar el correo.");
+    authMsg.className="auth-msg ok";
+    authMsg.textContent="Si el correo está registrado, recibirás un enlace para restablecer la contraseña.";
+  }catch(e){authMsg.className="auth-msg err";authMsg.textContent=e.message}
+  finally{forgotPasswordBtn.disabled=false}
+};
+
+
+async function authRequest(payload){
+  const r=await fetch("/api/auth",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    credentials:"same-origin",
+    body:JSON.stringify(payload)
+  });
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||"No fue posible autenticar.");
+  return j;
+}
+
+authForm.onsubmit=async(e)=>{
+  e.preventDefault();
+  authSubmit.disabled=true;
+  authMsg.className="auth-msg";
+  authMsg.textContent="Verificando...";
+  try{
+    const payload={
+      action:authMode==="signup"?"signup":"login",
+      email:authEmail.value.trim(),
+      password:authPassword.value
+    };
+    if(authMode==="signup")payload.name=authName.value.trim()||"Administrador";
+    const result=await authRequest(payload);
+    currentSession=result.user;
+    const cloud=await loadCloud();
+    if(cloud)S=cloud;
+    localStorage.setItem(K,JSON.stringify(S));
+    hideAuth();
+    badge(true,"☁️ Nube");
+    render();
+    show(currentSession?.role==="Mantenimiento"?"mantenimiento":"inicio");
+  }catch(err){
+    authMsg.className="auth-msg err";
+    authMsg.textContent=err.message||"No fue posible iniciar sesión.";
+  }finally{
+    authSubmit.disabled=false;
+  }
+};
+
+
+async function maybeResetPassword(){
+  const token=new URLSearchParams(location.search).get("reset");
+  if(!token)return false;
+  showAuth();
+  tabLogin.style.display="none";tabSignup.style.display="none";forgotPasswordBtn.style.display="none";
+  nameWrap.style.display="none";authEmail.closest("label").style.display="none";
+  authMsg.className="auth-msg";authMsg.textContent="Crea una contraseña nueva.";
+  authSubmit.textContent="Guardar nueva contraseña";
+  authForm.onsubmit=async(e)=>{
+    e.preventDefault();
+    const password=authPassword.value;
+    if(password.length<8){authMsg.className="auth-msg err";authMsg.textContent="La contraseña debe tener al menos 8 caracteres.";return}
+    authSubmit.disabled=true;
+    try{
+      const r=await fetch("/api/reset-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"confirm",token,password})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(j.error||"No fue posible cambiar la contraseña.");
+      history.replaceState({},document.title,location.pathname);
+      authMsg.className="auth-msg ok";authMsg.textContent="Contraseña actualizada. Ya puedes iniciar sesión.";
+      setTimeout(()=>location.reload(),900);
+    }catch(e){authMsg.className="auth-msg err";authMsg.textContent=e.message}
+    finally{authSubmit.disabled=false}
+  };
+  return true;
+}
+(async()=>{
+  render();
+  if(await maybeResetPassword())return;
+  try{
+    const r=await fetch("/api/auth?action=session",{credentials:"same-origin",cache:"no-store"});
+    if(r.ok){
+      const j=await r.json();
+      currentSession=j.user;
+      const cloud=await loadCloud();
+      if(cloud){
+        S=cloud;
+        localStorage.setItem(K,JSON.stringify(S));
+        hideAuth();badge(true,"☁️ Nube");render();
+        if(currentSession?.role==="Mantenimiento")show("mantenimiento");
+        return;
+      }
+      // Sesión válida pero la nube aún no respondió: conserva temporalmente la
+      // captura local y sigue reintentando, sin marcarla falsamente como Nube.
+      hideAuth();
+      pendingCloudSync=true;
+      badge(false,"⏳ Esperando nube");
+      render();
+      clearTimeout(syncTimer);
+      syncTimer=setTimeout(()=>loadCloud().then(fresh=>{
+        if(fresh){S=fresh;localStorage.setItem(K,JSON.stringify(S));render()}
+      }),1800);
+      if(currentSession?.role==="Mantenimiento")show("mantenimiento");
+      return;
+    }
+  }catch(e){console.warn(e)}
+  showAuth();
+})();
+</script>
+</body></html>
