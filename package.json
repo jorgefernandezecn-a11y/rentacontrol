@@ -1,10 +1,10 @@
 {
   "name": "rentacontrol",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "dependencies": {
     "pg": "^8.13.1",
-    "jose": "^5.9.6"
+    "bcryptjs": "^2.4.3"
   }
 }
