@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/state.js": {
+      "runtime": "nodejs20.x"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/state",
+      "destination": "/api/state.js"
+    }
+  ]
+}
