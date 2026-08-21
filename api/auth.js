@@ -1,4 +1,3 @@
-
 import pg from "pg";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -64,10 +63,10 @@ export default async function handler(req,res){
   try{
     if(req.method==="GET" && req.query?.action==="session"){
       const user=await sessionUser(req,client);
-      if(!user)return res.status(401).json({error:"Sin sesión"});
+      if(!user)return res.status(401).json({error:"Sin sesiÃ³n"});
       return res.status(200).json({ok:true,user});
     }
-    if(req.method!=="POST")return res.status(405).json({error:"Método no permitido"});
+    if(req.method!=="POST")return res.status(405).json({error:"MÃ©todo no permitido"});
     const action=req.body?.action;
 
     if(action==="logout"){
@@ -77,20 +76,38 @@ export default async function handler(req,res){
       return res.status(200).json({ok:true});
     }
 
+    if(action==="change_password"){
+      const user=await sessionUser(req,client);
+      if(!user)return res.status(401).json({error:"SesiÃ³n invÃ¡lida o expirada."});
+      const currentPassword=String(req.body?.currentPassword||"");
+      const newPassword=String(req.body?.newPassword||"");
+      if(newPassword.length<8)return res.status(400).json({error:"La nueva contraseÃ±a debe tener al menos 8 caracteres."});
+      const q=await client.query("select password_hash from app_users where id=$1",[user.id]);
+      if(!q.rows.length||!q.rows[0].password_hash)return res.status(400).json({error:"La cuenta no tiene contraseÃ±a configurada."});
+      const good=await bcrypt.compare(currentPassword,q.rows[0].password_hash);
+      if(!good)return res.status(401).json({error:"La contraseÃ±a actual no es correcta."});
+      const hash=await bcrypt.hash(newPassword,12);
+      await client.query("update app_users set password_hash=$1 where id=$2",[hash,user.id]);
+      await client.query("delete from app_sessions where user_id=$1",[user.id]);
+      const token=await createSession(client,user.id);
+      setSessionCookie(res,token);
+      return res.status(200).json({ok:true,user});
+    }
+
     const email=normalizeEmail(req.body?.email);
     const password=String(req.body?.password||"");
-    if(!email || password.length<8)return res.status(400).json({error:"Correo válido y contraseña de al menos 8 caracteres requeridos."});
+    if(!email || password.length<8)return res.status(400).json({error:"Correo vÃ¡lido y contraseÃ±a de al menos 8 caracteres requeridos."});
 
     if(action==="signup"){
       const admin=normalizeEmail(process.env.RENTA_ADMIN_EMAIL);
-      if(!admin || email!==admin)return res.status(403).json({error:"Este correo no está autorizado para crear la cuenta administradora."});
+      if(!admin || email!==admin)return res.status(403).json({error:"Este correo no estÃ¡ autorizado para crear la cuenta administradora."});
 
       const existing=await client.query("select id,password_hash from app_users where lower(email)=lower($1) limit 1",[email]);
       let userId;
       const hash=await bcrypt.hash(password,12);
 
       if(existing.rows.length){
-        if(existing.rows[0].password_hash)return res.status(409).json({error:"La cuenta ya existe. Usa Iniciar sesión."});
+        if(existing.rows[0].password_hash)return res.status(409).json({error:"La cuenta ya existe. Usa Iniciar sesiÃ³n."});
         userId=existing.rows[0].id;
         await client.query(
           "update app_users set name=$1,password_hash=$2,role='Administrador',active=true where id=$3",
@@ -116,11 +133,11 @@ export default async function handler(req,res){
         "select id,name,email,role,active,password_hash from app_users where lower(email)=lower($1) limit 1",
         [email]
       );
-      if(!q.rows.length || !q.rows[0].password_hash)return res.status(401).json({error:"Correo o contraseña incorrectos."});
+      if(!q.rows.length || !q.rows[0].password_hash)return res.status(401).json({error:"Correo o contraseÃ±a incorrectos."});
       const u=q.rows[0];
       if(!u.active)return res.status(403).json({error:"Usuario desactivado."});
       const good=await bcrypt.compare(password,u.password_hash);
-      if(!good)return res.status(401).json({error:"Correo o contraseña incorrectos."});
+      if(!good)return res.status(401).json({error:"Correo o contraseÃ±a incorrectos."});
 
       await client.query("delete from app_sessions where expires_at<=now()");
       const token=await createSession(client,u.id);
@@ -128,10 +145,10 @@ export default async function handler(req,res){
       return res.status(200).json({ok:true,user:{id:u.id,name:u.name,email:u.email,role:u.role}});
     }
 
-    return res.status(400).json({error:"Acción no válida."});
+    return res.status(400).json({error:"AcciÃ³n no vÃ¡lida."});
   }catch(e){
     console.error(e);
-    return res.status(500).json({error:"Error de autenticación."});
+    return res.status(500).json({error:"Error de autenticaciÃ³n."});
   }finally{
     client.release();
   }
