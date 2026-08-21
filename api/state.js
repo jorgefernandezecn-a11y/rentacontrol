@@ -39,13 +39,14 @@ async function authorize(req,client){
   return{ok:true,user:{id:u.id,name:u.name,email:u.email,role:u.role}};
 }
 async function readState(client){
-  const[p,t,c,pay,cr,m]=await Promise.all([
+  const[p,t,c,pay,cr,m,ins]=await Promise.all([
     client.query("select * from properties order by created_at"),
     client.query("select * from tenants order by created_at"),
     client.query("select * from contracts order by created_at"),
     client.query("select * from payments order by payment_date, created_at"),
     client.query("select * from credits order by payment_date, created_at"),
-    client.query("select * from maintenance_tasks order by task_date nulls last, created_at")
+    client.query("select * from maintenance_tasks order by task_date nulls last, created_at"),
+    client.query("select * from insurance_policies order by valid_to nulls last, created_at")
   ]);
   return{
     properties:p.rows.map(x=>({id:x.id,name:x.name,type:x.type,address:x.address,rent:num(x.rent),deposit:num(x.deposit),status:x.status})),
@@ -54,13 +55,14 @@ async function readState(client){
     payments:pay.rows.map(x=>({id:x.id,contractId:x.contract_id,period:x.period,amount:num(x.amount),date:String(x.payment_date).slice(0,10),method:x.method||"",notes:x.notes||""})),
     credits:cr.rows.map(x=>({id:x.id,contractId:x.contract_id,amount:num(x.amount),date:String(x.payment_date).slice(0,10),note:x.note||""})),
     maintenance:m.rows.map(x=>({id:x.id,title:x.title,type:x.type||"Otro",status:x.status||"Pendiente",propertyId:x.property_id||"",tenantId:x.tenant_id||"",responsible:x.responsible||"",date:x.task_date?String(x.task_date).slice(0,10):"",notes:x.notes||""})),
+    insurance:ins.rows.map(x=>({id:x.id,type:x.policy_type,company:x.company,policyNumber:x.policy_number,validFrom:x.valid_from?String(x.valid_from).slice(0,10):"",validTo:x.valid_to?String(x.valid_to).slice(0,10):"",beneficiary:x.beneficiary||"",cost:num(x.cost),notes:x.notes||""})),
     agenda:[]
   };
 }
 const stable=x=>JSON.stringify(x||[]);
 function permissionError(role,before,after){
   if(role==="Administrador"||role==="Cobranza")return null;
-  const sections=["properties","tenants","contracts","payments","credits","maintenance"];
+  const sections=["properties","tenants","contracts","payments","credits","maintenance","insurance"];
   const allowed=role==="Mantenimiento"?new Set(["maintenance"]):new Set();
   const changed=sections.filter(k=>stable(before[k])!==stable(after[k]));
   if(changed.every(k=>allowed.has(k)))return null;
@@ -76,6 +78,7 @@ function normalized(state){
   const payments=Array.isArray(s.payments)?s.payments:[];
   const credits=Array.isArray(s.credits)?s.credits:[];
   const maintenance=Array.isArray(s.maintenance)?s.maintenance:[];
+  const insurance=Array.isArray(s.insurance)?s.insurance:[];
 
   // Legacy contracts sometimes had no start/end date. Recover the earliest known
   // payment month when possible; otherwise use the current date.
@@ -107,7 +110,13 @@ function normalized(state){
     x.date=x.date&&validDate(x.date)?x.date:"";
     x.status=x.status||"Pendiente";
   }
-  return{properties,tenants,contracts,payments,credits,maintenance,agenda:[]};
+  for(const x of insurance){
+    x.type=["Coche","Inmueble","Gastos mÃ©dicos","Vida"].includes(x.type)?x.type:"Inmueble";
+    x.company=String(x.company||"").trim();x.policyNumber=String(x.policyNumber||"").trim();
+    x.validFrom=x.validFrom&&validDate(x.validFrom)?x.validFrom:"";x.validTo=x.validTo&&validDate(x.validTo)?x.validTo:"";
+    x.beneficiary=String(x.beneficiary||"").trim();x.cost=num(x.cost);x.notes=String(x.notes||"");
+  }
+  return{properties,tenants,contracts,payments,credits,maintenance,insurance,agenda:[]};
 }
 async function replaceState(client,input){
   const state=normalized(structuredClone(input));
@@ -118,6 +127,7 @@ async function replaceState(client,input){
 
   await client.query("begin");
   try{
+    await client.query("delete from insurance_policies");
     await client.query("delete from payments");
     await client.query("delete from credits");
     await client.query("delete from maintenance_tasks");
@@ -156,6 +166,11 @@ async function replaceState(client,input){
     for(const x of state.maintenance){
       await client.query(`insert into maintenance_tasks(id,title,type,status,property_id,tenant_id,responsible,task_date,notes) values($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [uid(x.id),x.title,x.type||null,x.status,x.propertyId?pMap.get(x.propertyId)||null:null,x.tenantId?tMap.get(x.tenantId)||null:null,x.responsible||null,x.date||null,x.notes||null]);
+    }
+    for(const x of state.insurance){
+      if(!x.company||!x.policyNumber)continue;
+      await client.query(`insert into insurance_policies(id,policy_type,company,policy_number,valid_from,valid_to,beneficiary,cost,notes) values($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [uid(x.id),x.type,x.company,x.policyNumber,x.validFrom||null,x.validTo||null,x.beneficiary||null,x.cost,x.notes||null]);
     }
     await client.query("commit");
   }catch(e){
