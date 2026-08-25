@@ -8,6 +8,14 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 const money = value => Number(value || 0);
 const currency = value => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(money(value));
 const monthPattern = /^\d{4}-\d{2}$/;
+const dateKey = value => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const text = String(value || "");
+  const match = text.match(/^\d{4}-\d{2}-\d{2}/);
+  if (match) return match[0];
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+};
 
 function monthRange(start, end) {
   const output = [];
@@ -50,14 +58,14 @@ export function makeReport(data, level, period, contractId) {
     const endPeriod = period;
     let running = 0;
     const rows = [];
-    for (const targetPeriod of monthRange(String(contract.start_date).slice(0, 10), `${endPeriod}-01`)) {
+    for (const targetPeriod of monthRange(dateKey(contract.start_date), `${endPeriod}-01`)) {
       const charge = money(contract.rent);
       const payments = paymentFor(contract, targetPeriod);
       running += charge - payments;
       rows.push({ period: targetPeriod, concept: "Renta mensual", charge, payment: payments, balance: running });
-      for (const credit of data.credits.filter(item => item.contract_id === contract.id && String(item.payment_date).slice(0, 7) === targetPeriod)) {
+      for (const credit of data.credits.filter(item => item.contract_id === contract.id && dateKey(item.payment_date).slice(0, 7) === targetPeriod)) {
         running -= money(credit.amount);
-        rows.push({ period: String(credit.payment_date).slice(0, 10), concept: credit.note || "Anticipo / pago a cuenta", charge: 0, payment: money(credit.amount), balance: running });
+        rows.push({ period: dateKey(credit.payment_date), concept: credit.note || "Anticipo / pago a cuenta", charge: 0, payment: money(credit.amount), balance: running });
       }
     }
     return { level, period, property, tenant, contract, rows, totalCharges: rows.reduce((sum, row) => sum + row.charge, 0), totalPaid: rows.reduce((sum, row) => sum + row.payment, 0), balance: running };

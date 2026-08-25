@@ -23,6 +23,18 @@ assert.equal(statement.totalPaid, 23000);
 assert.equal(statement.balance, 27000);
 assert.equal(statement.rows.at(-1).concept, "Anticipo");
 
+const yolaData = {
+  properties: [{ id: "p-yola", name: "PRUEBA NUBE", type: "Departamento", address: "", rent: 25000, status: "Rentada" }],
+  tenants: [{ id: "t-yola", name: "Yola Pruea", email: "", phone: "" }],
+  contracts: [{ id: "c-yola", property_id: "p-yola", tenant_id: "t-yola", start_date: new Date("2026-08-01T00:00:00.000Z"), end_date: new Date("2027-08-01T00:00:00.000Z"), rent: "25000.00", due_day: 5, status: "Vigente" }],
+  payments: [{ id: "pay-yola", contract_id: "c-yola", period: "2026-08", amount: "12500.00", payment_date: new Date("2026-08-21T00:00:00.000Z"), method: "Efectivo", notes: "" }],
+  credits: []
+};
+const yolaStatement = makeReport(yolaData, "statement", "2026-08", "c-yola");
+assert.equal(yolaStatement.totalCharges, 25000);
+assert.equal(yolaStatement.totalPaid, 12500);
+assert.equal(yolaStatement.balance, 12500);
+
 await mkdir("work/test-output", { recursive: true });
 const xlsx = await buildWorkbook(statement);
 await writeFile("work/test-output/estado-cuenta.xlsx", Buffer.from(xlsx));
