@@ -39,10 +39,10 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
 <div id="authGate" class="auth-gate">
   <div class="auth-box">
     <div class="auth-brand"><img class="brand-logo" src="BAL%20INTRERNATIONAL.png" alt="BAL International"><span>RentaControl</span></div>
-    <p class="sub">Acceso seguro</p>
+    <p class="sub">Acceso privado por invitación del Administrador</p>
     <div class="auth-tabs">
       <button id="tabLogin" class="btn primary" type="button">Iniciar sesión</button>
-      <button id="tabSignup" class="btn" type="button">Crear cuenta inicial</button>
+      <button id="tabSignup" class="btn" type="button" style="display:none">Registro deshabilitado</button>
     </div>
     <form id="authForm">
       <label id="nameWrap" style="display:none">Nombre<input id="authName" autocomplete="name"></label>
@@ -51,7 +51,7 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
       <button class="btn primary" style="width:100%;margin-top:12px" id="authSubmit">Entrar</button>
     </form>
     <button id="forgotPasswordBtn" type="button" class="btn" style="width:100%;margin-top:10px;border:0">¿Olvidaste tu contraseña?</button>
-    <div id="authMsg" class="auth-msg">Usa la cuenta autorizada para RentaControl.</div>
+    <div id="authMsg" class="auth-msg">Solo pueden entrar usuarios autorizados por el Administrador.</div>
   </div>
 </div>
 
@@ -539,14 +539,14 @@ changePass.onclick=passwordForm;
 
 let authMode="login";
 function setAuthMode(mode){
-  authMode=mode;
-  nameWrap.style.display=mode==="signup"?"block":"none";
-  authSubmit.textContent=mode==="signup"?"Crear cuenta":"Entrar";
-  tabLogin.classList.toggle("primary",mode==="login");
-  tabSignup.classList.toggle("primary",mode==="signup");
-  authPassword.autocomplete=mode==="signup"?"new-password":"current-password";
+  authMode="login";
+  nameWrap.style.display="none";
+  authSubmit.textContent="Entrar";
+  tabLogin.classList.add("primary");
+  tabSignup.classList.remove("primary");
+  authPassword.autocomplete="current-password";
   authMsg.className="auth-msg";
-  authMsg.textContent=mode==="signup"?"Crea la cuenta inicial usando el correo autorizado en Vercel.":"Usa tu cuenta autorizada para RentaControl.";
+  authMsg.textContent="Solo pueden entrar usuarios autorizados por el Administrador.";
 }
 function showAuth(message=""){
   authGate.classList.remove("hidden");
@@ -560,7 +560,7 @@ function hideAuth(){
   document.querySelector("nav").style.visibility="visible";
 }
 tabLogin.onclick=()=>setAuthMode("login");
-tabSignup.onclick=()=>setAuthMode("signup");
+tabSignup.onclick=()=>setAuthMode("login");
 forgotPasswordBtn.onclick=async()=>{
   const email=(authEmail.value||"").trim();
   if(!email){authMsg.className="auth-msg err";authMsg.textContent="Escribe primero tu correo.";return}
@@ -596,11 +596,10 @@ authForm.onsubmit=async(e)=>{
   authMsg.textContent="Verificando...";
   try{
     const payload={
-      action:authMode==="signup"?"signup":"login",
+      action:"login",
       email:authEmail.value.trim(),
       password:authPassword.value
     };
-    if(authMode==="signup")payload.name=authName.value.trim()||"Administrador";
     const result=await authRequest(payload);
     currentSession=result.user;
     const cloud=await loadCloud();
