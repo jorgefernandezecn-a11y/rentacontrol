@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@vercel/blob": "^2.0.0",
     "pg": "^8.13.1",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.17.2"
   }
 }
