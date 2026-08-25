@@ -312,10 +312,13 @@ function insuranceDetail(id){
   <div class="row"><span>Vigencia</span><b>${p.validFrom||"—"} → ${p.validTo||"—"}</b></div>
   <div class="row"><span>Beneficiario</span><b>${p.beneficiary||"—"}</b></div>
   <div class="row"><span>Costo</span><b>${M(p.cost)}</b></div><div class="row"><span>Recordatorios</span><b>${(p.reminderDays||[30,15,7,1]).join(", ")} días antes</b></div>${p.notes?`<div class="info-box">${p.notes}</div>`:""}
-  ${currentSession?.role==="Consulta"?"":`<div class="actions"><button class="btn" id="editIns">Editar</button><button class="btn danger" id="deleteIns">Eliminar</button></div>`}</div>`;
+  ${currentSession?.role==="Consulta"?"":`<div class="actions"><button class="btn" id="editIns">Editar</button><button class="btn danger" id="deleteIns">Eliminar</button></div>`}</div>
+  <div class="card" style="margin-top:12px"><div class="toolbar"><div><h3 style="margin:0">Copia de la póliza y documentos</h3><div class="meta">PDF, imágenes, Word, Excel y otros archivos relacionados</div></div>${['Administrador','Cobranza'].includes(currentSession?.role)?'<button class="btn primary" id="uploadInsuranceDocument">+ Archivo</button>':''}</div><div id="insuranceDocuments" class="document-grid"><span class="meta">Cargando documentos...</span></div></div>`;
   show("detalle");backIns.onclick=()=>{show("seguros");render()};
   if(document.getElementById("editIns"))editIns.onclick=()=>insuranceForm(id);
   if(document.getElementById("deleteIns"))deleteIns.onclick=()=>{if(confirm("¿Eliminar esta póliza?")){S.insurance=S.insurance.filter(x=>x.id!==id);save();show("seguros")}};
+  if(document.getElementById('uploadInsuranceDocument'))uploadInsuranceDocument.onclick=()=>insuranceDocumentForm(id);
+  loadInsuranceDocuments(id);
 }
 
 function render(){
@@ -371,6 +374,22 @@ function documentForm(propertyId){
   modal.classList.add('on');
 }
 
+async function loadInsuranceDocuments(policyId){
+  const container=document.getElementById('insuranceDocuments');if(!container)return;
+  try{
+    const response=await cloudFetch(`/api/insurance-documents?policyId=${encodeURIComponent(policyId)}`);
+    const data=await response.json();if(!response.ok)throw new Error(data.error||'No fue posible cargar los documentos.');
+    container.innerHTML=data.documents.map(doc=>`<div class="document-card"><h4>${H(doc.display_name)}</h4><div class="meta">${H(doc.document_date?.slice(0,10)||'')} · ${H(doc.mime_type)} · ${Math.ceil((+doc.size_bytes||0)/1024)} KB</div>${doc.description?`<p>${H(doc.description)}</p>`:''}<div class="actions"><a class="btn" target="_blank" rel="noopener" href="/api/insurance-documents?download=${encodeURIComponent(doc.id)}&inline=1">Ver</a><a class="btn" href="/api/insurance-documents?download=${encodeURIComponent(doc.id)}">Descargar</a>${['Administrador','Cobranza'].includes(currentSession?.role)?`<button class="btn danger delete-insurance-document" data-id="${H(doc.id)}">Eliminar</button>`:''}</div></div>`).join('')||'<span class="meta">Todavía no hay archivos asociados a esta póliza.</span>';
+    container.querySelectorAll('.delete-insurance-document').forEach(button=>button.onclick=async()=>{if(!confirm('¿Eliminar este archivo de la póliza?'))return;const response=await cloudFetch(`/api/insurance-documents?id=${encodeURIComponent(button.dataset.id)}`,{method:'DELETE'});const data=await response.json();if(!response.ok){alert(data.error||'No fue posible eliminar.');return}loadInsuranceDocuments(policyId)});
+  }catch(error){container.innerHTML=`<span class="meta">${H(error.message)}</span>`}
+}
+
+function insuranceDocumentForm(policyId){
+  FT='insuranceDocument';E=null;CTX={view:'detalle',policyId};ft.textContent='Agregar documento de la póliza';
+  fields.innerHTML=`<label>Nombre<input name="displayName" required maxlength="160" placeholder="Ej. Póliza vigente 2026"></label><label>Descripción<textarea name="description" rows="3" maxlength="1000"></textarea></label><div class="two"><label>Fecha<input type="date" name="documentDate" value="${TD()}" required></label><label>Archivo<input class="file-input" type="file" name="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.rtf,.txt,.csv,.odt,.ods" required></label></div><div class="meta">Máximo 4 MB. El archivo se guarda de forma privada.</div>`;
+  modal.classList.add('on');
+}
+
 async function downloadReport(level,format,contractId=''){
   const params=new URLSearchParams({level,format,period:period.value||MO()});if(contractId)params.set('contractId',contractId);
   const response=await cloudFetch(`/api/reports?${params}`);if(!response.ok){const data=await response.json().catch(()=>({}));alert(data.error||'No fue posible generar el reporte.');return}
@@ -406,15 +425,18 @@ function creditForm(cid){if(isMaintenance()){alert('Tu perfil de Mantenimiento t
 function taskForm(i=null){if(!guardWrite())return;FT='task';E=i;let m=i?S.maintenance.find(x=>x.id===i):{};CTX={view:document.querySelector('.view.active').id,id:i};ft.textContent=i?'Editar tarea':'Nueva tarea';fields.innerHTML=`<label>Título<input name="title" value="${m.title||''}" required></label><div class="two"><label>Tipo<select name="type"><option ${m.type==='Reparación'?'selected':''}>Reparación</option><option ${m.type==='Documentos'?'selected':''}>Documentos</option><option ${m.type==='Visita'?'selected':''}>Visita</option><option ${m.type==='Cobranza'?'selected':''}>Cobranza</option><option ${m.type==='Firma'?'selected':''}>Firma</option><option ${!m.type||m.type==='Otro'?'selected':''}>Otro</option></select></label><label>Estado<select name="status"><option ${!m.status||m.status==='Pendiente'?'selected':''}>Pendiente</option><option ${m.status==='En proceso'?'selected':''}>En proceso</option><option ${m.status==='Terminada'?'selected':''}>Terminada</option></select></label><label>Inmueble<select name="propertyId"><option value="">Sin inmueble</option>${opts(S.properties,x=>x.name,m.propertyId||'')}</select></label><label>Inquilino<select name="tenantId"><option value="">Sin inquilino</option>${opts(S.tenants,x=>x.name,m.tenantId||'')}</select></label><label>Responsable<input name="responsible" value="${m.responsible||''}"></label><label>Fecha<input type="date" name="date" value="${m.date||TD()}"></label></div><label>Notas / avance<textarea name="notes" rows="5">${m.notes||''}</textarea></label>`;modal.classList.add('on')}
 
 form.onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target).entries());
- if(FT==='document'){
+ if(FT==='document'||FT==='insuranceDocument'){
    const file=e.target.elements.file.files[0];
    if(!file){alert('Selecciona un archivo.');return}
    if(file.size>4*1024*1024){alert('El archivo supera el límite de 4 MB.');return}
    const submit=e.submitter;submit.disabled=true;submit.textContent='Subiendo...';
    try{
-     const response=await cloudFetch('/api/property-documents',{method:'POST',headers:{'Content-Type':file.type,'X-Property-Id':CTX.propertyId,'X-File-Name':encodeURIComponent(file.name),'X-Display-Name':encodeURIComponent(d.displayName),'X-Description':encodeURIComponent(d.description||''),'X-Document-Date':d.documentDate},body:file});
+     const insuranceUpload=FT==='insuranceDocument',endpoint=insuranceUpload?'/api/insurance-documents':'/api/property-documents';
+     const headers={'Content-Type':file.type,'X-File-Name':encodeURIComponent(file.name),'X-Display-Name':encodeURIComponent(d.displayName),'X-Description':encodeURIComponent(d.description||''),'X-Document-Date':d.documentDate};
+     headers[insuranceUpload?'X-Policy-Id':'X-Property-Id']=insuranceUpload?CTX.policyId:CTX.propertyId;
+     const response=await cloudFetch(endpoint,{method:'POST',headers,body:file});
      const data=await response.json();if(!response.ok)throw new Error(data.error||'No fue posible subir el archivo.');
-     modal.classList.remove('on');pdeta(CTX.propertyId);
+     modal.classList.remove('on');if(insuranceUpload)insuranceDetail(CTX.policyId);else pdeta(CTX.propertyId);
    }catch(error){alert(error.message)}finally{submit.disabled=false;submit.textContent='Guardar'}
    return;
  }
@@ -452,7 +474,7 @@ form.onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData
 if(FT==='task'){let rec={title:d.title,type:d.type,status:d.status,propertyId:d.propertyId||'',tenantId:d.tenantId||'',responsible:d.responsible||'',date:d.date||'',notes:d.notes||''};if(E)Object.assign(S.maintenance.find(x=>x.id===E),rec);else{E=ID('m');S.maintenance.push({id:E,...rec})}}
  save();modal.classList.remove('on');if(FT==='property')pdeta(E||S.properties.at(-1).id);else if(FT==='tenant')tdeta(E||S.tenants.at(-1).id);else if(FT==='task')taskDetail(E);else acct(d.cid)
 };
-cancel.onclick=()=>{modal.classList.remove('on');if(FT==="user"&&CTX?.users){usersPage();return}if(FT==="password"){show("configuracion");return}if(FT==='document'&&CTX?.propertyId){pdeta(CTX.propertyId);return}if(CTX?.view==='detalle'){if(FT==='property'&&CTX.id)pdeta(CTX.id);else if(FT==='tenant'&&CTX.id)tdeta(CTX.id);else if((FT==='pay'||FT==='credit')&&CTX.cid)acct(CTX.cid);else if(FT==='task'&&CTX.id)taskDetail(CTX.id);else show(prev)}else show(CTX?.view||prev)};
+cancel.onclick=()=>{modal.classList.remove('on');if(FT==="user"&&CTX?.users){usersPage();return}if(FT==="password"){show("configuracion");return}if(FT==='document'&&CTX?.propertyId){pdeta(CTX.propertyId);return}if(FT==='insuranceDocument'&&CTX?.policyId){insuranceDetail(CTX.policyId);return}if(CTX?.view==='detalle'){if(FT==='property'&&CTX.id)pdeta(CTX.id);else if(FT==='tenant'&&CTX.id)tdeta(CTX.id);else if((FT==='pay'||FT==='credit')&&CTX.cid)acct(CTX.cid);else if(FT==='task'&&CTX.id)taskDetail(CTX.id);else show(prev)}else show(CTX?.view||prev)};
 newProp.onclick=()=>{if(guardWrite())propertyForm()};newTenant.onclick=()=>{if(guardWrite())tenantForm()};newPay.onclick=()=>{if(!guardWrite())return;payForm()};newInsurance.onclick=()=>{if(guardWrite())insuranceForm()};newTask.onclick=()=>{if(guardWrite())taskForm()};totalReceivableCard.onclick=totalReceivableDetail;period.value=MO();period.onchange=render;
 document.querySelectorAll('.report-download').forEach(button=>button.onclick=()=>downloadReport(button.dataset.level,button.dataset.format));
 
