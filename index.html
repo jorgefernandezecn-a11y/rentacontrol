@@ -301,7 +301,8 @@ function insuranceForm(id=null){
   <label>Fin de vigencia<input type="date" name="validTo" value="${p?.validTo||""}"></label>
   <label>Costo<input type="number" min="0" step="0.01" name="cost" value="${p?.cost??0}" required></label></div>
   <label>Recordarme antes del vencimiento</label><div class="info-box" style="display:flex;gap:14px;flex-wrap:wrap">${[30,15,7,1].map(day=>`<label style="display:flex;align-items:center;gap:6px;margin:0;color:var(--t)"><input type="checkbox" name="reminder_${day}" style="width:auto;margin:0" ${(p?.reminderDays||[30,15,7,1]).includes(day)?"checked":""}> ${day} día${day===1?"":"s"} antes</label>`).join("")}</div>
-  <label>Notas<textarea name="notes" rows="3">${p?.notes||""}</textarea></label>`;
+  <label>Notas<textarea name="notes" rows="3">${p?.notes||""}</textarea></label>
+  ${p?'':`<div class="info-box"><b>Documentos de la póliza</b><div class="meta">Después de guardar se abrirá la póliza para que puedas subir la copia y otros archivos.</div></div>`}`;
   modal.classList.add("on");
 }
 function insuranceDetail(id){
@@ -468,8 +469,9 @@ form.onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData
  }
  if(FT==='credit')S.credits.push({id:ID('cr'),contractId:d.cid,amount:+d.amount||0,date:d.date,note:d.note||'Pago a cuenta'});
  if(FT==='insurance'){
- const rec={id:E||ID('ins'),type:d.type,company:d.company.trim(),policyNumber:d.policyNumber.trim(),validFrom:d.validFrom||'',validTo:d.validTo||'',beneficiary:d.beneficiary.trim(),cost:+d.cost||0,reminderDays:[30,15,7,1].filter(day=>d['reminder_'+day]==='on'),notes:d.notes||''};
- if(E){const i=S.insurance.findIndex(x=>x.id===E);if(i>=0)S.insurance[i]=rec}else S.insurance.push(rec);
+ const existingId=E,rec={id:existingId||ID('ins'),type:d.type,company:d.company.trim(),policyNumber:d.policyNumber.trim(),validFrom:d.validFrom||'',validTo:d.validTo||'',beneficiary:d.beneficiary.trim(),cost:+d.cost||0,reminderDays:[30,15,7,1].filter(day=>d['reminder_'+day]==='on'),notes:d.notes||''};E=rec.id;
+ if(existingId){const i=S.insurance.findIndex(x=>x.id===existingId);if(i>=0)S.insurance[i]=rec}else S.insurance.push(rec);
+ localStorage.setItem(K,JSON.stringify(S));render();modal.classList.remove('on');await saveCloud();const saved=S.insurance.find(x=>x.policyNumber===rec.policyNumber&&x.company===rec.company);if(saved)insuranceDetail(saved.id);return;
 }
 if(FT==='task'){let rec={title:d.title,type:d.type,status:d.status,propertyId:d.propertyId||'',tenantId:d.tenantId||'',responsible:d.responsible||'',date:d.date||'',notes:d.notes||''};if(E)Object.assign(S.maintenance.find(x=>x.id===E),rec);else{E=ID('m');S.maintenance.push({id:E,...rec})}}
  save();modal.classList.remove('on');if(FT==='property')pdeta(E||S.properties.at(-1).id);else if(FT==='tenant')tdeta(E||S.tenants.at(-1).id);else if(FT==='task')taskDetail(E);else acct(d.cid)
