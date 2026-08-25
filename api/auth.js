@@ -99,35 +99,8 @@ export default async function handler(req,res){
     const password=String(req.body?.password||"");
     if(!email || password.length<8)return res.status(400).json({error:"Correo vÃ¡lido y contraseÃ±a de al menos 8 caracteres requeridos."});
 
-    if(action==="signup"){
-      const admin=normalizeEmail(process.env.RENTA_ADMIN_EMAIL);
-      if(!admin || email!==admin)return res.status(403).json({error:"Este correo no estÃ¡ autorizado para crear la cuenta administradora."});
-
-      const existing=await client.query("select id,password_hash from app_users where lower(email)=lower($1) limit 1",[email]);
-      let userId;
-      const hash=await bcrypt.hash(password,12);
-
-      if(existing.rows.length){
-        if(existing.rows[0].password_hash)return res.status(409).json({error:"La cuenta ya existe. Usa Iniciar sesiÃ³n."});
-        userId=existing.rows[0].id;
-        await client.query(
-          "update app_users set name=$1,password_hash=$2,role='Administrador',active=true where id=$3",
-          [String(req.body?.name||"Administrador"),hash,userId]
-        );
-      }else{
-        const ins=await client.query(
-          `insert into app_users(name,email,role,active,password_hash)
-           values($1,$2,'Administrador',true,$3) returning id`,
-          [String(req.body?.name||"Administrador"),email,hash]
-        );
-        userId=ins.rows[0].id;
-      }
-
-      await client.query("delete from app_sessions where user_id=$1",[userId]);
-      const token=await createSession(client,userId);
-      setSessionCookie(res,token);
-      return res.status(200).json({ok:true,user:{id:userId,name:String(req.body?.name||"Administrador"),email,role:"Administrador"}});
-    }
+    if(action==="signup")
+      return res.status(403).json({error:"El registro público está deshabilitado. Solicita acceso al Administrador."});
 
     if(action==="login"){
       const q=await client.query(
