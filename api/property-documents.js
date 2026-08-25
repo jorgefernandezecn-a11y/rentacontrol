@@ -6,7 +6,15 @@ import { canAccessBusinessData, canManageDocuments, requireSession } from "./_se
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 3 });
-const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+const allowedTypes = new Set([
+  "application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif",
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/rtf", "text/rtf", "text/plain", "text/csv",
+  "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet"
+]);
+const allowedExtensions = new Set(["pdf", "jpg", "jpeg", "png", "webp", "heic", "heif", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "txt", "csv", "odt", "ods"]);
 // Vercel server uploads are capped at 4.5 MB; leave headroom for request overhead.
 const maxBytes = 4 * 1024 * 1024;
 const safeName = value => String(value || "archivo").normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 120);
@@ -60,8 +68,9 @@ export default async function handler(req, res) {
       const description = decodeURIComponent(String(req.headers["x-description"] || "")).trim().slice(0, 1000);
       const documentDate = String(req.headers["x-document-date"] || new Date().toISOString().slice(0, 10));
       const mimeType = String(req.headers["content-type"] || "application/octet-stream").split(";")[0].toLowerCase();
+      const extension = originalName.toLowerCase().split(".").pop();
       if (!propertyId || !displayName) return sendError(res, 400, "Inmueble y nombre son requeridos.");
-      if (!allowedTypes.has(mimeType)) return sendError(res, 415, "Solo se permiten imágenes y archivos PDF.");
+      if (!allowedTypes.has(mimeType) || !allowedExtensions.has(extension)) return sendError(res, 415, "Formato no permitido. Usa PDF, imágenes, Word, Excel, PowerPoint o archivos de texto.");
       const exists = await client.query("select 1 from properties where id = $1", [propertyId]);
       if (!exists.rows.length) return sendError(res, 404, "Inmueble no encontrado.");
       const chunks = [];
