@@ -3,6 +3,14 @@
     {
       "source": "/api/state",
       "destination": "/api/state.js"
+    },
+    {
+      "source": "/privacidad",
+      "destination": "/privacidad.html"
+    },
+    {
+      "source": "/soporte",
+      "destination": "/soporte.html"
     }
   ]
 }
