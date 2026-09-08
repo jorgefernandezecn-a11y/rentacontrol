@@ -94,8 +94,8 @@ try{
  await page.locator('#authGate.hidden').waitFor({state:'attached'});
  await page.locator('#settingsBtn').click();await page.locator('#manageUsers').click();
  const button=page.locator(`[data-delete-user="${subject.id}"]`);await button.waitFor();
- page.once('dialog',d=>d.dismiss());await button.click();assert.equal((await db.query('select id from app_users where id=$1',[subject.id])).rowCount,1);
- page.once('dialog',d=>d.accept());await button.click();await button.waitFor({state:'detached'});
+ await button.click();await page.locator('#cancelUserDeletion').click();assert.equal((await db.query('select id from app_users where id=$1',[subject.id])).rowCount,1);
+ await button.click();await page.locator('#confirmUserDeletion').click();await button.waitFor({state:'detached'});
  }else{assert.equal((await api('/api/users',{action:'delete',id:subject.id},adminLogin.cookie)).status,200)}
  assert.equal((await db.query('select id from app_users where id=$1',[subject.id])).rowCount,0);
  assert.equal((await db.query('select id from app_sessions where user_id=$1',[subject.id])).rowCount,0);

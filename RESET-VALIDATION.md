@@ -39,3 +39,9 @@ El último comando ejecuta también el navegador, confirmación/cancelación de 
 ## Despliegue
 
 Aplicar el parche sobre la base indicada (o revisar conflictos si main avanzó). Publicar los tres archivos modificados mediante el despliegue habitual del repositorio en Vercel. Conservar DATABASE_URL, RESEND_API_KEY y RENTA_EMAIL_FROM existentes. No se requieren cambios de esquema. Después de desplegar, comprobar un enlace nuevo desde el correo y login con la contraseña nueva. La rama de pruebas de Neon se conserva para revisión; puede eliminarse cuando deje de necesitarse.
+
+## Corrección de confirmación en iPhone
+
+Se reemplazó `window.confirm` para eliminar usuarios por una ventana HTML dentro de la aplicación, porque el contenedor WKWebView inspeccionado no implementa el diálogo nativo de confirmación. Incluye cancelar, progreso, error visible y reintento; no cambia los endpoints ni el esquema.
+
+Verificado en navegador integrado con API simulada: cancelar no envía eliminación; error 503 permanece visible; reintento exitoso elimina la fila ficticia y cierra la ventana. La prueba `node test/user-delete-authorization.mjs` verifica con conexiones simuladas que la API admite solamente administradores activos, rechaza los otros tres roles, anónimos, administradores inactivos y autoeliminación, y vuelve a comprobar permisos dentro de la transacción. Las pruebas de integración existentes se actualizaron para usar los botones HTML en vez de diálogos nativos. No se eliminaron usuarios reales durante estas comprobaciones.

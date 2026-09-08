@@ -498,15 +498,53 @@ async function usersPage(){
     backUsers.onclick=()=>show("configuracion");
     addUserBtn.onclick=()=>userForm();
     document.querySelectorAll("#detail [data-user]").forEach(x=>x.onclick=()=>userForm(x.dataset.user,j.users.find(u=>u.id===x.dataset.user)));
-    document.querySelectorAll("#detail [data-delete-user]").forEach(button=>button.onclick=async(event)=>{
+    document.querySelectorAll("#detail [data-delete-user]").forEach(button=>button.onclick=event=>{
       event.stopPropagation();
-      const user=j.users.find(u=>u.id===button.dataset.deleteUser);
-      if(!confirm(`¿Eliminar a ${user.name} (${user.email})? Perderá el acceso. Sus documentos e historial se conservarán. Esta acción no se puede deshacer.`))return;
-      button.disabled=true;
-      try{await usersApi({action:"delete",id:user.id});await usersPage()}
-      catch(error){alert(error.message);button.disabled=false}
+      if(!isAdmin())return;
+      confirmUserDeletion(j.users.find(u=>u.id===button.dataset.deleteUser));
     });
   }catch(e){alert(e.message)}
+}
+function confirmUserDeletion(user){
+  if(!isAdmin()||!user||user.id===currentSession?.id)return;
+  document.getElementById("deleteUserDialog")?.remove();
+  const overlay=document.createElement("div");
+  overlay.id="deleteUserDialog";
+  overlay.className="modal on";
+  overlay.style.cssText="align-items:center;justify-content:center;padding:16px;z-index:1000";
+  overlay.innerHTML=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="deleteUserTitle" style="max-width:440px;width:100%;padding:24px">
+    <h2 id="deleteUserTitle">Eliminar usuario</h2>
+    <p>¿Eliminar a <strong>${H(user.name)}</strong> (${H(user.email||"")})?</p>
+    <p>Perderá el acceso. Sus documentos e historial se conservarán. Esta acción no se puede deshacer.</p>
+    <p id="deleteUserMessage" role="status" aria-live="polite"></p>
+    <div class="actions"><button type="button" class="btn" id="cancelUserDeletion">Cancelar</button><button type="button" class="btn primary" id="confirmUserDeletion">Eliminar usuario</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const cancelButton=overlay.querySelector("#cancelUserDeletion");
+  const confirmButton=overlay.querySelector("#confirmUserDeletion");
+  const message=overlay.querySelector("#deleteUserMessage");
+  const close=()=>{overlay.remove();document.querySelector(`[data-delete-user="${user.id}"]`)?.focus()};
+  cancelButton.onclick=close;
+  overlay.onkeydown=event=>{
+    if(event.key==="Escape"&&!confirmButton.disabled){event.preventDefault();close()}
+    if(event.key==="Tab"){event.preventDefault();(document.activeElement===cancelButton?confirmButton:cancelButton).focus()}
+  };
+  confirmButton.onclick=async()=>{
+    if(confirmButton.disabled)return;
+    if(!isAdmin()){message.textContent="Solo un Administrador puede eliminar usuarios.";return}
+    confirmButton.disabled=true;cancelButton.disabled=true;
+    message.textContent="Eliminando usuario...";
+    try{
+      const result=await usersApi({action:"delete",id:user.id});
+      if(result.ok!==true)throw new Error("No fue posible eliminar el usuario.");
+      overlay.remove();
+      await usersPage();
+    }catch(error){
+      message.textContent=error.message||"No fue posible eliminar el usuario.";
+      confirmButton.disabled=false;cancelButton.disabled=false;
+    }
+  };
+  cancelButton.focus();
 }
 function userForm(id=null,u=null){if(!isAdmin()){alert('Solo un Administrador puede gestionar usuarios.');return}
   FT="user";E=id;CTX={view:"detalle",users:true};
