@@ -7,7 +7,8 @@ const { Pool } = pg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 3
+  max: 3,
+  connectionTimeoutMillis: 10000
 });
 
 const sha256=v=>crypto.createHash("sha256").update(v).digest("hex");
@@ -43,8 +44,9 @@ async function sendResetEmail(to,url){
 export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
   if(req.method!=="POST")return res.status(405).json({error:"Método no permitido"});
-  const client=await pool.connect();
+  let client;
   try{
+    client=await pool.connect();
     const action=req.body?.action;
     if(action==="request"){
       const email=norm(req.body?.email);
@@ -77,18 +79,21 @@ export default async function handler(req,res){
       const token=String(req.body?.token||"");
       const password=String(req.body?.password||"");
       if(password.length<8)return res.status(400).json({error:"La contraseña debe tener al menos 8 caracteres."});
-      const q=await client.query(
-        `select pr.id,pr.user_id
-         from password_reset_tokens pr
-         join app_users u on u.id=pr.user_id
-         where pr.token_hash=$1 and pr.used_at is null and pr.expires_at>now() and u.active=true
-         limit 1`,
-        [sha256(token)]
-      );
-      if(!q.rows.length)return res.status(400).json({error:"El enlace es inválido o ya expiró."});
       const hash=await bcrypt.hash(password,12);
       await client.query("begin");
       try{
+        const q=await client.query(
+          `select pr.id,pr.user_id
+           from password_reset_tokens pr
+           join app_users u on u.id=pr.user_id
+           where pr.token_hash=$1 and pr.used_at is null and pr.expires_at>now() and u.active=true
+           limit 1 for update of pr`,
+          [sha256(token)]
+        );
+        if(!q.rows.length){
+          await client.query("rollback");
+          return res.status(400).json({error:"El enlace es inválido o ya expiró."});
+        }
         await client.query("update app_users set password_hash=$1 where id=$2",[hash,q.rows[0].user_id]);
         await client.query("update password_reset_tokens set used_at=now() where id=$1",[q.rows[0].id]);
         await client.query("delete from app_sessions where user_id=$1",[q.rows[0].user_id]);
@@ -101,5 +106,5 @@ export default async function handler(req,res){
   }catch(e){
     console.error(e);
     return res.status(500).json({error:"Error al restablecer la contraseña."});
-  }finally{client.release()}
+  }finally{client?.release()}
 }

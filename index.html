@@ -493,11 +493,19 @@ async function usersPage(){
     const j=await usersApi();
     detail.innerHTML=`<button class="btn" id="backUsers">← Configuración</button>
     <div class="card" style="margin-top:12px"><div class="toolbar"><div><h2>Usuarios</h2><div class="meta">Administra quién puede entrar y qué rol tiene.</div></div><button class="btn primary" id="addUserBtn">+ Usuario</button></div>
-    ${j.users.map(u=>`<div class="row click" data-user="${u.id}"><div><b>${u.name}</b><div class="meta">${u.email||""} · ${u.role}</div></div><span class="pill ${u.active?'ok':'danger'}">${u.active?'Activo':'Desactivado'}</span></div>`).join("")}</div>`;
+    ${j.users.map(u=>`<div class="row click" data-user="${u.id}"><div><b>${u.name}</b><div class="meta">${u.email||""} · ${u.role}</div></div><div><span class="pill ${u.active?'ok':'danger'}">${u.active?'Activo':'Desactivado'}</span> ${u.id!==currentSession?.id?`<button type="button" class="btn" data-delete-user="${u.id}">Eliminar</button>`:""}</div></div>`).join("")}</div>`;
     show("detalle");
     backUsers.onclick=()=>show("configuracion");
     addUserBtn.onclick=()=>userForm();
     document.querySelectorAll("#detail [data-user]").forEach(x=>x.onclick=()=>userForm(x.dataset.user,j.users.find(u=>u.id===x.dataset.user)));
+    document.querySelectorAll("#detail [data-delete-user]").forEach(button=>button.onclick=async(event)=>{
+      event.stopPropagation();
+      const user=j.users.find(u=>u.id===button.dataset.deleteUser);
+      if(!confirm(`¿Eliminar a ${user.name} (${user.email})? Perderá el acceso. Sus documentos e historial se conservarán. Esta acción no se puede deshacer.`))return;
+      button.disabled=true;
+      try{await usersApi({action:"delete",id:user.id});await usersPage()}
+      catch(error){alert(error.message);button.disabled=false}
+    });
   }catch(e){alert(e.message)}
 }
 function userForm(id=null,u=null){if(!isAdmin()){alert('Solo un Administrador puede gestionar usuarios.');return}
@@ -624,6 +632,9 @@ async function maybeResetPassword(){
   showAuth();
   tabLogin.style.display="none";tabSignup.style.display="none";forgotPasswordBtn.style.display="none";
   nameWrap.style.display="none";authEmail.closest("label").style.display="none";
+  // Hidden login fields must not block native form validation during reset.
+  authEmail.disabled=true;
+  authPassword.autocomplete="new-password";
   authMsg.className="auth-msg";authMsg.textContent="Crea una contraseña nueva.";
   authSubmit.textContent="Guardar nueva contraseña";
   authForm.onsubmit=async(e)=>{
@@ -631,10 +642,11 @@ async function maybeResetPassword(){
     const password=authPassword.value;
     if(password.length<8){authMsg.className="auth-msg err";authMsg.textContent="La contraseña debe tener al menos 8 caracteres.";return}
     authSubmit.disabled=true;
+    authMsg.className="auth-msg";authMsg.textContent="Guardando nueva contraseña...";
     try{
       const r=await fetch("/api/reset-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"confirm",token,password})});
       const j=await r.json().catch(()=>({}));
-      if(!r.ok)throw new Error(j.error||"No fue posible cambiar la contraseña.");
+      if(!r.ok||j.ok!==true)throw new Error(j.error||"No fue posible cambiar la contraseña.");
       history.replaceState({},document.title,location.pathname);
       authMsg.className="auth-msg ok";authMsg.textContent="Contraseña actualizada. Ya puedes iniciar sesión.";
       setTimeout(()=>location.reload(),900);

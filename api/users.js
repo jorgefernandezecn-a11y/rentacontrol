@@ -40,7 +40,7 @@ export default async function handler(req,res){
   const client=await pool.connect();
   try{
     const me=await currentUser(req,client);
-    if(!me)return res.status(401).json({error:"Inicia sesión para continuar."});
+    if(!me?.active)return res.status(401).json({error:"Inicia sesión para continuar."});
     if(me.role!=="Administrador")return res.status(403).json({error:"Solo un Administrador puede gestionar usuarios."});
 
     if(req.method==="GET"){
@@ -53,6 +53,35 @@ export default async function handler(req,res){
 
     if(req.method==="POST"){
       const action=req.body?.action;
+      if(action==="delete"){
+        const id=String(req.body?.id||"");
+        if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
+          return res.status(400).json({error:"Usuario no válido."});
+        if(id.toLowerCase()===me.id.toLowerCase())
+          return res.status(400).json({error:"No puedes eliminar tu propia cuenta de Administrador."});
+        await client.query("begin");
+        try{
+          // Serialize account changes and recheck permission inside the transaction.
+          await client.query("lock table app_users in share row exclusive mode");
+          const authorized=await currentUser(req,client);
+          if(!authorized?.active||authorized.role!=="Administrador"){
+            await client.query("rollback");
+            return res.status(403).json({error:"Solo un Administrador activo puede eliminar usuarios."});
+          }
+          const target=await client.query("select id,name,email from app_users where id=$1",[id]);
+          if(!target.rows.length){
+            await client.query("rollback");
+            return res.status(404).json({error:"Usuario no encontrado."});
+          }
+          // Keep audit history, including attribution, without its foreign key.
+          await client.query(`update audit_log set user_id=null,
+            details=coalesce(details,'{}'::jsonb)||jsonb_build_object('deleted_user',$2::jsonb)
+            where user_id=$1`,[id,JSON.stringify(target.rows[0])]);
+          await client.query("delete from app_users where id=$1",[id]);
+          await client.query("commit");
+          return res.status(200).json({ok:true});
+        }catch(e){await client.query("rollback");throw e}
+      }
       if(action==="create"){
         const name=String(req.body?.name||"").trim();
         const email=norm(req.body?.email);
