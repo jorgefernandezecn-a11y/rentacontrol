@@ -30,9 +30,9 @@ function monthRange(start, end) {
 
 async function loadData(client) {
   const [properties, tenants, contracts, payments, credits] = await Promise.all([
-    client.query("select id,name,type,address,rent,status from properties order by name"),
+    client.query("select e.id,e.name,e.type,e.address,e.rent,e.status,exists(select 1 from audit_log where action='archive' and entity_type='property' and entity_id=e.id::text) archived from properties e order by name"),
     client.query("select id,name,email,phone from tenants order by name"),
-    client.query("select id,property_id,tenant_id,start_date,end_date,rent,due_day,status from contracts order by start_date"),
+    client.query("select c.*,a.termination_date from contracts c left join lateral(select coalesce(details->>'terminationDate',c.end_date::text) termination_date from audit_log where action='archive' and entity_type='contract' and entity_id=c.id::text order by id desc limit 1) a on true order by start_date"),
     client.query("select id,contract_id,period,amount,payment_date,method,notes from payments order by payment_date,created_at"),
     client.query("select id,contract_id,amount,payment_date,note from credits order by payment_date,created_at")
   ]);
@@ -59,7 +59,7 @@ export function makeReport(data, level, period, contractId) {
     let running = 0;
     const rows = [];
     for (const targetPeriod of monthRange(dateKey(contract.start_date), `${endPeriod}-01`)) {
-      const charge = money(contract.rent);
+      const charge = contract.termination_date && targetPeriod > contract.termination_date.slice(0, 7) ? 0 : money(contract.rent);
       const payments = paymentFor(contract, targetPeriod);
       running += charge - payments;
       rows.push({ period: targetPeriod, concept: "Renta mensual", charge, payment: payments, balance: running });
@@ -74,8 +74,9 @@ export function makeReport(data, level, period, contractId) {
   const expected = balances.reduce((sum, row) => sum + row.rent, 0);
   const paid = balances.reduce((sum, row) => sum + row.paid, 0);
   const pending = balances.reduce((sum, row) => sum + Math.max(0, row.balance), 0);
-  const occupied = data.properties.filter(item => item.status === "Rentada").length;
-  return { level, period, balances, properties: data.properties, expected, paid, pending, overdue: balances.filter(row => row.balance > 0 && new Date().getDate() > money(row.contract.due_day || 5)).length, occupancy: data.properties.length ? occupied / data.properties.length : 0 };
+  const visibleProperties = data.properties.filter(item => !item.archived);
+  const occupied = visibleProperties.filter(item => item.status === "Rentada").length;
+  return { level, period, balances, properties: visibleProperties, expected, paid, pending, overdue: balances.filter(row => row.balance > 0 && new Date().getDate() > money(row.contract.due_day || 5)).length, occupancy: visibleProperties.length ? occupied / visibleProperties.length : 0 };
 }
 
 function styleSheet(sheet, widths) {

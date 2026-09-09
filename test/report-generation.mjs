@@ -46,3 +46,19 @@ const pdf = await buildPdf(statement);
 await writeFile("work/test-output/estado-cuenta.pdf", pdf);
 assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
 console.log("report generation ok");
+
+// Early termination preserves all receipts and stops rent after the closing month.
+const terminated = structuredClone(data);
+terminated.contracts[0].status = "Terminado";
+terminated.contracts[0].termination_date = "2026-08-15";
+const closedStatement = makeReport(terminated, "statement", "2026-12", contractId);
+assert.equal(closedStatement.totalCharges, 50000);
+assert.equal(closedStatement.totalPaid, 23000);
+assert.equal(closedStatement.balance, 27000);
+assert(closedStatement.rows.filter(row=>row.period>"2026-08-31").every(row=>row.charge===0));
+terminated.properties[0].archived = true;
+const closedGeneral = makeReport(terminated, "general", "2026-12", "");
+assert.equal(closedGeneral.expected, 0);
+assert.equal(closedGeneral.properties.length, 0);
+assert.equal(closedGeneral.occupancy, 0);
+console.log("PASS early termination statements preserve receipts and exclude future charges; archived properties excluded from occupancy");

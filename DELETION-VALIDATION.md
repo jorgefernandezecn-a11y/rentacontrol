@@ -1,45 +1,31 @@
-# Eliminación segura de inmuebles e inquilinos
+# Eliminación y terminación anticipada
 
-Base de producción: c1900367be5c6c1cbba22f20d08c17898023ebd1.
+Esta versión sustituye los bloqueos por dependencias de la versión anterior.
 
-## Comportamiento
+- Eliminar inmueble, inquilino o contrato permite continuar aunque existan contratos vigentes, pagos, créditos, depósitos, documentos o mantenimiento.
+- La confirmación HTML explica el efecto antes de Cancelar / Eliminar.
+- El registro sale de las listas activas y queda en Historial. Los contratos vinculados se marcan Terminados; un contrato vigente registra como terminación el día de la operación, conservando su vencimiento original.
+- Un inmueble queda Disponible cuando no tiene otro contrato vigente. Eliminar un contrato no retira al inquilino del directorio. Repetir la eliminación de un contrato anterior no modifica una ocupación nueva.
+- Historial permite consultar inquilinos e inmuebles retirados, contratos terminados y sus pagos. Las referencias y archivos no se borran.
+- Los reportes conservan movimientos y dejan de agregar renta en meses posteriores a la terminación. No se calculan prorrateos, penalizaciones, devoluciones ni condonaciones automáticas.
+- Se conservan permisos de Administrador y Cobranza; los demás roles no reciben nuevos permisos. Se mantienen transacciones, control de versión y protección contra sobrescrituras.
+- La información de baja se guarda en audit_log, sin migraciones de esquema ni variables nuevas. No se pueden reactivar registros retirados mediante una copia desactualizada.
 
-- Detalle y edición incluyen Eliminar inmueble / Eliminar inquilino.
-- Confirmación HTML dentro de la aplicación, con Cancelar / Eliminar, foco inicial en Cancelar, progreso, bloqueo de doble envío y error visible. Compatible con el contenedor WKWebView existente, sin depender de window.confirm.
-- Administrador y Cobranza conservan su permiso de escritura; Consulta, Mantenimiento, usuarios inactivos y sesiones ausentes no pueden eliminar estos registros.
-- DELETE /api/state comprueba permisos, versión del estado, existencia, todas las referencias declaradas en PostgreSQL y depósitos de inquilinos. Bloquea contratos incluso terminados, y por ello conserva pagos y créditos. También bloquea mantenimiento incluso terminado, documentos y cualquier otra referencia declarada. No se introdujo archivado porque el sistema actual no tiene ese patrón.
-- La operación utiliza una transacción, bloqueo del registro y auditoría. Un fallo revierte la eliminación. No elimina archivos externos.
-- La sincronización usa actualizaciones en sitio en lugar de borrar y reinsertar todo: conserva documentos, fechas de creación y relaciones. Se protegen las fechas de PostgreSQL al serializarlas.
-- La versión del estado evita sobrescrituras desde otro dispositivo o desde una copia anterior a la eliminación. Una versión antigua debe recargar la app; se rechazan escrituras sin revisión. Ante conflicto, se conserva una copia local en rentacontrol_v2_conflict_backup y se indica actualizar la app.
-- No se pueden omitir inmuebles, inquilinos, contratos, pagos o créditos mediante PUT para eludir estas protecciones.
-- Se conectó la función existente renderInsurance a render: faltaba la llamada en la base de producción, dejando vacía la sección a pesar de existir pólizas.
+## Validación
 
-## Verificación
+Rama de pruebas aislada de Neon: br-autumn-breeze-a65nnoor. No se realizaron eliminaciones de registros de producción durante las pruebas.
 
-Pruebas en la rama aislada Neon test-property-tenant-delete-20260909 (br-autumn-breeze-a65nnoor), con credenciales solo en memoria del proceso; sin archivos de credenciales ni modificaciones de datos de producción.
+La prueba test/entity-deletion.mjs cubre permisos en los tres tipos de registro; eliminación de un inquilino con contrato vigente, depósito, pagos, créditos, documentos y mantenimiento; conservación de datos; cierre y liberación del inmueble; sincronización posterior; rechazo de reactivación; nueva ocupación; eliminación independiente de contrato; eliminación de inmueble con documentos; concurrencia; comparación con los datos originales y limpieza.
 
-- Eliminación libre, permisos, registro inexistente, copias antiguas y clientes sin revisión.
-- Contratos históricos, pagos, créditos, mantenimiento terminado, documentos y depósitos bloquean la eliminación.
-- Guardado completo conserva datos, fechas y documentos de inmuebles y seguros.
-- Creación de inmuebles e inquilinos con identificadores temporales; dos eliminaciones simultáneas producen un éxito y un conflicto.
-- Omisión de historial financiero rechazada; auditoría de las eliminaciones comprobada.
-- Comparación de los registros originales antes y después; limpieza de los registros de prueba.
-- Pruebas existentes de autorización para eliminar usuarios y manejo de error de conexión de recuperación de contraseña.
-- Navegador integrado conectado al endpoint real de estado y la rama aislada: cancelar y eliminar ambos registros desde sus formularios, comprobar ausencia en listas y bloqueo visible de inquilino con contrato histórico.
-- Navegación de Inicio, Inmuebles, Inquilinos, Pagos, Otros, Seguros y Usuarios. Se comprobó Seguros de nuevo tras conectar su función de actualización.
+La prueba test/report-generation.mjs verifica reportes PDF/Excel existentes, conservación de recibos y saldos, ausencia de cargos posteriores al mes de terminación y exclusión de inmuebles retirados del cálculo de ocupación.
 
-Límites: no se ejecutó en un iPhone físico ni en un simulador iOS. La prueba de navegador utiliza una sesión de prueba; sus respuestas de autenticación, usuarios y listado de archivos son controladas por el servidor de prueba. Estado, sincronización y eliminación sí utilizan el código real y Neon. La conservación de documentos se comprobó directamente en PostgreSQL. No se reenviaron correos ni se probaron pagos reales o descargas de informes.
+En navegador integrado conectado a la API de estado real y Neon se comprobó la confirmación de un contrato vigente, Cancelar, la eliminación del inquilino con contrato vigente y depósito, su ausencia de la lista activa y su aparición junto al contrato en Historial. Las respuestas de autenticación, usuarios y listado de archivos del servidor local son de prueba; estado y eliminación usan Neon real. No se utilizó iPhone físico ni simulador iOS.
 
-## Repetir
-
-Con Node 20+, las dependencias del proyecto y DATABASE_URL / TEST_DATABASE_HOST de una rama aislada en el entorno del proceso:
+Para repetir, usar Node 20+ con DATABASE_URL y TEST_DATABASE_HOST de una rama aislada en el entorno del proceso. Nunca guardar credenciales en el repositorio:
 
 ```
 node test/entity-deletion.mjs
-node test/user-delete-authorization.mjs
-node test/reset-connection.mjs
+node test/report-generation.mjs
 ```
 
-BROWSER_TEST=1 mantiene un servidor local para revisión manual; Ctrl+C realiza la limpieza al terminar. El servidor es exclusivamente de prueba y no se publica como endpoint de la aplicación.
-
-No se requieren migraciones ni cambios de variables de producción. La app iOS carga https://rentacontrol-ruddy.vercel.app; cerrar completamente y volver a abrir tras publicar carga la versión nueva.
+BROWSER_TEST=1 mantiene el servidor local para inspección; Ctrl+C limpia los registros temporales. El servidor de pruebas no forma parte de las rutas publicadas.

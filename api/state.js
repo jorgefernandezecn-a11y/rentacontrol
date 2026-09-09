@@ -11,7 +11,7 @@ function dateOr(v,f){return validDate(v)?String(v).slice(0,10):f}
 function parseCookies(req){const out={};for(const pair of String(req.headers.cookie||"").split(";")){const i=pair.indexOf("=");if(i>0)out[pair.slice(0,i).trim()]=decodeURIComponent(pair.slice(i+1).trim())}return out}
 async function authorize(req,c){const token=parseCookies(req)[COOKIE];if(!token)return{ok:false,status:401,error:"Inicia sesiÃ³n para continuar."};const q=await c.query(`select u.id,u.name,u.email,u.role,u.active,s.id session_id from app_sessions s join app_users u on u.id=s.user_id where s.token_hash=$1 and s.expires_at>now() limit 1 for share of u,s`,[sha256(token)]);if(!q.rows.length)return{ok:false,status:401,error:"SesiÃ³n invÃ¡lida o expirada."};const u=q.rows[0];if(!u.active)return{ok:false,status:403,error:"Usuario desactivado."};await c.query("update app_sessions set last_seen_at=now() where id=$1",[u.session_id]);return{ok:true,user:{id:u.id,name:u.name,email:u.email,role:u.role}}}
 const dateValue=v=>v instanceof Date?`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`:String(v).slice(0,10);
-async function readState(c){const[p,t,co,pay,cr,m,ins]=await Promise.all([c.query("select * from properties order by created_at,id"),c.query("select * from tenants order by created_at,id"),c.query("select * from contracts order by created_at,id"),c.query("select * from payments order by payment_date,created_at,id"),c.query("select * from credits order by payment_date,created_at,id"),c.query("select * from maintenance_tasks order by task_date nulls last,created_at,id"),c.query("select * from insurance_policies order by valid_to nulls last,created_at,id")]);return{properties:p.rows.map(x=>({id:x.id,name:x.name,type:x.type,address:x.address,rent:num(x.rent),deposit:num(x.deposit),status:x.status})),tenants:t.rows.map(x=>({id:x.id,name:x.name,phone:x.phone||"",email:x.email||"",securityDeposit:x.security_deposit==null?null:num(x.security_deposit),guarantor:{name:x.guarantor_name||"",phones:x.guarantor_phones||"",email:x.guarantor_email||"",address:x.guarantor_address||"",propertyType:x.guarantor_property_type||"",propertyAddress:x.guarantor_property_address||""}})),contracts:co.rows.map(x=>({id:x.id,propertyId:x.property_id,tenantId:x.tenant_id,start:dateValue(x.start_date),end:dateValue(x.end_date),rent:num(x.rent),dueDay:num(x.due_day,5),status:x.status})),payments:pay.rows.map(x=>({id:x.id,contractId:x.contract_id,period:x.period,amount:num(x.amount),date:dateValue(x.payment_date),method:x.method||"",notes:x.notes||""})),credits:cr.rows.map(x=>({id:x.id,contractId:x.contract_id,amount:num(x.amount),date:dateValue(x.payment_date),note:x.note||""})),maintenance:m.rows.map(x=>({id:x.id,title:x.title,type:x.type||"Otro",status:x.status||"Pendiente",propertyId:x.property_id||"",tenantId:x.tenant_id||"",responsible:x.responsible||"",date:x.task_date?dateValue(x.task_date):"",notes:x.notes||""})),insurance:ins.rows.map(x=>({id:x.id,type:x.policy_type,company:x.company,policyNumber:x.policy_number,validFrom:x.valid_from?dateValue(x.valid_from):"",validTo:x.valid_to?dateValue(x.valid_to):"",beneficiary:x.beneficiary||"",cost:num(x.cost),reminderDays:Array.isArray(x.reminder_days)?x.reminder_days.map(Number):[30,15,7,1],notes:x.notes||""})),agenda:[]}}
+async function readState(c){const[p,t,co,pay,cr,m,ins]=await Promise.all([c.query("select e.*,a.created_at archived_at,a.details->>'terminationDate' termination_date from properties e left join lateral(select created_at,details from audit_log where action='archive' and entity_type='property' and entity_id=e.id::text order by id desc limit 1) a on true order by e.created_at,e.id"),c.query("select e.*,a.created_at archived_at,a.details->>'terminationDate' termination_date from tenants e left join lateral(select created_at,details from audit_log where action='archive' and entity_type='tenant' and entity_id=e.id::text order by id desc limit 1) a on true order by e.created_at,e.id"),c.query("select e.*,a.created_at archived_at,a.details->>'terminationDate' termination_date from contracts e left join lateral(select created_at,details from audit_log where action='archive' and entity_type='contract' and entity_id=e.id::text order by id desc limit 1) a on true order by e.created_at,e.id"),c.query("select * from payments order by payment_date,created_at,id"),c.query("select * from credits order by payment_date,created_at,id"),c.query("select * from maintenance_tasks order by task_date nulls last,created_at,id"),c.query("select * from insurance_policies order by valid_to nulls last,created_at,id")]);return{properties:p.rows.map(x=>({id:x.id,archivedAt:x.archived_at||null,name:x.name,type:x.type,address:x.address,rent:num(x.rent),deposit:num(x.deposit),status:x.status})),tenants:t.rows.map(x=>({id:x.id,archivedAt:x.archived_at||null,name:x.name,phone:x.phone||"",email:x.email||"",securityDeposit:x.security_deposit==null?null:num(x.security_deposit),guarantor:{name:x.guarantor_name||"",phones:x.guarantor_phones||"",email:x.guarantor_email||"",address:x.guarantor_address||"",propertyType:x.guarantor_property_type||"",propertyAddress:x.guarantor_property_address||""}})),contracts:co.rows.map(x=>({id:x.id,archivedAt:x.archived_at||null,terminationDate:x.termination_date||null,propertyId:x.property_id,tenantId:x.tenant_id,start:dateValue(x.start_date),end:dateValue(x.end_date),rent:num(x.rent),dueDay:num(x.due_day,5),status:x.status})),payments:pay.rows.map(x=>({id:x.id,contractId:x.contract_id,period:x.period,amount:num(x.amount),date:dateValue(x.payment_date),method:x.method||"",notes:x.notes||""})),credits:cr.rows.map(x=>({id:x.id,contractId:x.contract_id,amount:num(x.amount),date:dateValue(x.payment_date),note:x.note||""})),maintenance:m.rows.map(x=>({id:x.id,title:x.title,type:x.type||"Otro",status:x.status||"Pendiente",propertyId:x.property_id||"",tenantId:x.tenant_id||"",responsible:x.responsible||"",date:x.task_date?dateValue(x.task_date):"",notes:x.notes||""})),insurance:ins.rows.map(x=>({id:x.id,type:x.policy_type,company:x.company,policyNumber:x.policy_number,validFrom:x.valid_from?dateValue(x.valid_from):"",validTo:x.valid_to?dateValue(x.valid_to):"",beneficiary:x.beneficiary||"",cost:num(x.cost),reminderDays:Array.isArray(x.reminder_days)?x.reminder_days.map(Number):[30,15,7,1],notes:x.notes||""})),agenda:[]}}
 const stable=x=>JSON.stringify(x||[]);
 function permissionError(role,before,after){if(role==="Administrador"||role==="Cobranza")return null;const sections=["properties","tenants","contracts","payments","credits","maintenance","insurance"],allowed=role==="Mantenimiento"?new Set(["maintenance"]):new Set(),changed=sections.filter(k=>stable(before[k])!==stable(after[k]));if(changed.every(k=>allowed.has(k)))return null;if(role==="Consulta")return"Tu perfil es de solo consulta. No tienes permiso para modificar informaciÃ³n.";if(role==="Mantenimiento")return"Tu perfil de Mantenimiento puede modificar Ãºnicamente mantenimientos, fallas, notas, avances y estado de trabajos.";return"No tienes permiso para realizar esta modificaciÃ³n."}
 function normalized(input){const s=input&&typeof input==="object"?input:{},properties=Array.isArray(s.properties)?s.properties:[],tenants=Array.isArray(s.tenants)?s.tenants:[],contracts=Array.isArray(s.contracts)?s.contracts:[],payments=Array.isArray(s.payments)?s.payments:[],credits=Array.isArray(s.credits)?s.credits:[],maintenance=Array.isArray(s.maintenance)?s.maintenance:[],insurance=Array.isArray(s.insurance)?s.insurance:[];for(const c of contracts){const fp=payments.filter(p=>p.contractId===c.id&&/^\d{4}-\d{2}$/.test(String(p.period||""))).map(p=>p.period).sort()[0],fs=fp?`${fp}-01`:today();c.start=dateOr(c.start,fs);c.end=dateOr(c.end,plusYear(c.start));c.dueDay=Math.min(31,Math.max(1,Math.trunc(num(c.dueDay,5))));c.rent=num(c.rent);c.status=c.status||"Vigente"}for(const p of payments){p.period=/^\d{4}-\d{2}$/.test(String(p.period||""))?String(p.period):ym();p.date=dateOr(p.date,`${p.period}-01`);p.amount=num(p.amount)}for(const c of credits){c.date=dateOr(c.date,today());c.amount=num(c.amount)}for(const x of properties){x.name=String(x.name||"Inmueble").trim()||"Inmueble";x.rent=num(x.rent);x.deposit=num(x.deposit);x.status=x.status||"Disponible"}for(const x of tenants)x.name=String(x.name||"Inquilino").trim()||"Inquilino";for(const x of maintenance){x.title=String(x.title||"Mantenimiento").trim()||"Mantenimiento";x.date=x.date&&validDate(x.date)?x.date:"";x.status=x.status||"Pendiente"}for(const x of insurance){x.type=["Coche","Inmueble","Gastos mÃ©dicos","Vida"].includes(x.type)?x.type:"Inmueble";x.company=String(x.company||"").trim();x.policyNumber=String(x.policyNumber||"").trim();x.validFrom=x.validFrom&&validDate(x.validFrom)?x.validFrom:"";x.validTo=x.validTo&&validDate(x.validTo)?x.validTo:"";x.beneficiary=String(x.beneficiary||"").trim();x.cost=num(x.cost);x.reminderDays=(Array.isArray(x.reminderDays)?x.reminderDays:[30,15,7,1]).map(Number).filter(n=>[30,15,7,1].includes(n));x.notes=String(x.notes||"")}return{properties,tenants,contracts,payments,credits,maintenance,insurance,agenda:[]}}
@@ -21,34 +21,32 @@ await c.query(`delete from ${table} where not (id=any($1::uuid[]))`,[items.map(x
 
 const revisionOf=state=>sha256(JSON.stringify(state));
 const fail=(status,message)=>Object.assign(new Error(message),{status});
-const quote=value=>'"'+String(value).replaceAll('"','""')+'"';
+async function archiveRecord(c,entity,id,user,details){
+  await c.query("insert into audit_log(user_id,action,entity_type,entity_id,details) values($1,'archive',$2,$3,$4)",[user.id,entity,id,details]);
+}
 async function deleteEntity(c,body,user){
-  const table=body.entity==='property'?'properties':body.entity==='tenant'?'tenants':null;
+  const table={property:'properties',tenant:'tenants',contract:'contracts'}[body.entity];
   if(!table||!isUuid(body.id))throw fail(400,'Registro no válido.');
-  if(!['Administrador','Cobranza'].includes(user.role))throw fail(403,'Tu perfil no puede eliminar inmuebles ni inquilinos.');
+  if(!['Administrador','Cobranza'].includes(user.role))throw fail(403,'Tu perfil no puede eliminar estos registros.');
   const target=(await c.query(`select * from ${table} where id=$1 for update`,[body.id])).rows[0];
   if(!target)throw fail(404,'El registro ya no existe. Actualiza la información.');
-  // Discover every declared relationship, including cascades and future tables.
-  const references=(await c.query(`select ns.nspname schema_name,cl.relname table_name,a.attname column_name,
-    cardinality(k.conkey) key_count,b.attname parent_column
-    from pg_constraint k join pg_class cl on cl.oid=k.conrelid
-    join pg_namespace ns on ns.oid=cl.relnamespace
-    join pg_attribute a on a.attrelid=k.conrelid and a.attnum=k.conkey[1]
-    join pg_attribute b on b.attrelid=k.confrelid and b.attnum=k.confkey[1]
-    where k.contype='f' and k.confrelid=$1::regclass`,[table])).rows;
-  const reasons=[];
-  for(const ref of references){
-    if(ref.key_count!==1||ref.parent_column!=='id')throw fail(409,'Este registro tiene relaciones que requieren revisión. Conserva el registro y solicita ayuda al administrador.');
-    const count=Number((await c.query(`select count(*) n from ${quote(ref.schema_name)}.${quote(ref.table_name)} where ${quote(ref.column_name)}=$1`,[body.id])).rows[0].n);
-    if(count){
-      const messages={contracts:'contratos vigentes o históricos. Conserva el registro para mantener los contratos, pagos y créditos; terminar o desvincular un contrato no elimina su historial',maintenance_tasks:'tareas de Otros / mantenimiento. Revisa y reasigna sus vínculos solo si fueron capturados por error; conserva los trabajos históricos',property_documents:'documentos o fotos en el expediente. Revisa esos archivos; conserva el inmueble si forman parte de su historial'};
-      reasons.push(`${count} ${messages[ref.table_name]||'registros relacionados. Solicita al administrador revisar esas relaciones antes de eliminar'}.`);
+  const archived=await c.query("select id from audit_log where action='archive' and entity_type=$1 and entity_id=$2",[body.entity,body.id]);
+  if(archived.rows.length)return;
+  // Retire records without removing financial or maintenance history or foreign keys.
+  const related=body.entity==='contract'?[target]:(await c.query(`select * from contracts where ${body.entity==='tenant'?'tenant_id':'property_id'}=$1 for update`,[body.id])).rows;
+  const properties=new Set();
+  for(const contract of related){
+    properties.add(contract.property_id);
+    const exists=await c.query("select id from audit_log where action='archive' and entity_type='contract' and entity_id=$1",[contract.id]);
+    if(!exists.rows.length){
+      await c.query("update contracts set status='Terminado' where id=$1",[contract.id]);
+      await archiveRecord(c,'contract',contract.id,user,{name:target.name||'Contrato',terminationDate:contract.status==='Vigente'?today():null,originalEnd:dateValue(contract.end_date),reason:'Eliminación solicitada',source:body.entity});
     }
   }
-  if(table==='tenants'&&Number(target.security_deposit)>0)reasons.push('Hay un depósito en garantía registrado. Conserva al inquilino para mantener esa información financiera.');
-  if(reasons.length)throw fail(409,'No se puede eliminar: '+reasons.join(' '));
-  await c.query(`delete from ${table} where id=$1`,[body.id]);
-  await c.query("insert into audit_log(user_id,action,entity_type,details) values($1,'delete',$2,$3)",[user.id,body.entity,{id:body.id,name:target.name}]);
+  if(body.entity!=='contract')await archiveRecord(c,body.entity,body.id,user,{name:target.name,reason:'Eliminación solicitada'});
+  for(const propertyId of properties){
+    await c.query("update properties set status='Disponible' where id=$1 and not exists(select 1 from contracts where property_id=$1 and status='Vigente')",[propertyId]);
+  }
 }
 export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
@@ -73,6 +71,14 @@ export default async function handler(req,res){
         if(denied)throw fail(403,denied);
         for(const section of ['properties','tenants','contracts','payments','credits']){
           if(before[section].some(x=>!incoming[section].some(y=>y.id===x.id)))throw fail(409,['properties','tenants'].includes(section)?'Para eliminar, abre el detalle del inmueble o inquilino y usa Eliminar. Se debe comprobar su historial primero.':'No se pueden quitar contratos, pagos ni créditos mediante la sincronización. Conserva el historial financiero.');
+        }
+        // Archived records remain available for history, but cannot be reactivated by a stale client.
+        for(const section of ['properties','tenants','contracts'])for(const record of before[section].filter(x=>x.archivedAt)){
+          const next=incoming[section].find(x=>x.id===record.id);
+          if(JSON.stringify(next)!==JSON.stringify(record))throw fail(409,'Este registro está en Historial. Vuelve a abrir la app para actualizar la información.');
+        }
+        for(const contract of incoming.contracts.filter(x=>x.status==='Vigente')){
+          if(before.tenants.some(x=>x.id===contract.tenantId&&x.archivedAt)||before.properties.some(x=>x.id===contract.propertyId&&x.archivedAt))throw fail(409,'Selecciona un inmueble y un inquilino activos para el nuevo contrato.');
         }
         await replaceState(c,incoming);
       }
