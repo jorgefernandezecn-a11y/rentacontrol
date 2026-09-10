@@ -1,3 +1,4 @@
+import { fiscalFor, netRent, roundMoney } from "../fiscal.js";
 import pg from "pg";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
@@ -45,9 +46,9 @@ export function makeReport(data, level, period, contractId) {
   const active = data.contracts.filter(item => item.status === "Vigente");
   const paymentFor = (contract, targetPeriod) => data.payments.filter(item => item.contract_id === contract.id && item.period === targetPeriod).reduce((sum, item) => sum + money(item.amount), 0);
   const balances = active.map(contract => {
-    const rent = money(contract.rent);
+    const rent = netRent(contract,period);
     const paid = paymentFor(contract, period);
-    return { contract, property: propertyById.get(contract.property_id), tenant: tenantById.get(contract.tenant_id), rent, paid, balance: rent - paid };
+    return { contract, property: propertyById.get(contract.property_id), tenant: tenantById.get(contract.tenant_id), rent, paid, fiscal:fiscalFor(contract,period), balance: roundMoney(rent - paid) };
   });
 
   if (level === "statement") {
@@ -59,12 +60,12 @@ export function makeReport(data, level, period, contractId) {
     let running = 0;
     const rows = [];
     for (const targetPeriod of monthRange(dateKey(contract.start_date), `${endPeriod}-01`)) {
-      const charge = contract.termination_date && targetPeriod > contract.termination_date.slice(0, 7) ? 0 : money(contract.rent);
+      const charge = contract.termination_date && targetPeriod > contract.termination_date.slice(0, 7) ? 0 : netRent(contract,targetPeriod);
       const payments = paymentFor(contract, targetPeriod);
-      running += charge - payments;
-      rows.push({ period: targetPeriod, concept: "Renta mensual", charge, payment: payments, balance: running });
+      running = roundMoney(running + charge - payments);
+      rows.push({ period: targetPeriod, concept: "Renta neta mensual", fiscal:charge?fiscalFor(contract,targetPeriod):null, charge, payment: payments, balance: running });
       for (const credit of data.credits.filter(item => item.contract_id === contract.id && dateKey(item.payment_date).slice(0, 7) === targetPeriod)) {
-        running -= money(credit.amount);
+        running = roundMoney(running - money(credit.amount));
         rows.push({ period: dateKey(credit.payment_date), concept: credit.note || "Anticipo / pago a cuenta", charge: 0, payment: money(credit.amount), balance: running });
       }
     }
@@ -104,13 +105,13 @@ export async function buildWorkbook(report) {
     [3, 4, 5].forEach(row => { summary.getCell(`B${row}`).numFmt = '"$"#,##0.00'; });
     summary.getCell("B7").numFmt = "0%";
     const portfolio = workbook.addWorksheet("Cartera");
-    portfolio.addRow(["Inmueble", "Tipo", "Dirección", "Estado", "Renta"]);
+    portfolio.addRow(["Inmueble", "Tipo", "Dirección", "Estado", "Referencia"]);
     report.properties.forEach(item => portfolio.addRow([item.name, item.type, item.address, item.status, money(item.rent)]));
     styleSheet(portfolio, [26, 18, 42, 16, 18]);
     portfolio.getColumn(5).numFmt = '"$"#,##0.00';
   } else if (report.level === "balances") {
     const sheet = workbook.addWorksheet("Saldos");
-    sheet.addRow(["Periodo", "Inmueble", "Inquilino", "Renta", "Pagos", "Saldo"]);
+    sheet.addRow(["Periodo", "Inmueble", "Inquilino", "Neto", "Pagos", "Saldo"]);
     report.balances.forEach(row => sheet.addRow([report.period, row.property?.name || "", row.tenant?.name || "", row.rent, row.paid, row.balance]));
     sheet.addRow(["", "", "TOTAL", report.expected, report.paid, report.pending]);
     styleSheet(sheet, [14, 28, 28, 18, 18, 18]);
@@ -126,9 +127,18 @@ export async function buildWorkbook(report) {
     sheet.lastRow.font = { bold: true };
     sheet.headerFooter.oddHeader = `&L&BEstado de cuenta - ${report.tenant?.name || "Inquilino"}&R${report.property?.name || ""}`;
   }
+  const taxSheet=workbook.addWorksheet("Desglose fiscal");
+  taxSheet.addRow(["Periodo","Inmueble","Renta bruta","IVA","Ret. IVA","Ret. ISR","Neto a cobrar","Clasificación"]);
+  fiscalRows(report).forEach(row=>taxSheet.addRow(row));
+  styleSheet(taxSheet,[14,28,18,18,18,18,18,42]);
+  [3,4,5,6,7].forEach(col=>{taxSheet.getColumn(col).numFmt='"$"#,##0.00'});
   return workbook.xlsx.writeBuffer();
 }
 
+function fiscalRows(report){
+ const rows=report.level==='statement'?report.rows.filter(r=>r.fiscal).map(r=>({period:r.period,name:report.property?.name,f:r.fiscal})):report.balances.map(r=>({period:report.period,name:r.property?.name,f:r.fiscal}));
+ return rows.map(({period,name,f})=>[period,name||'',f.configured?f.base:null,f.configured?f.iva.amount:null,f.configured?f.retIva.amount:null,f.configured?f.retIsr.amount:null,f.net,f.configured?'Base + IVA - ret. IVA - ret. ISR':'Importe anterior; sin desglose']);
+}
 function drawTable(doc, headers, rows, widths) {
   const left = doc.page.margins.left;
   const drawRow = (cells, header = false) => {
@@ -169,9 +179,14 @@ export async function buildPdf(report) {
   } else {
     doc.fillColor("#172033").font("Helvetica-Bold").fontSize(11).text(`Esperado: ${currency(report.expected)}   Cobrado: ${currency(report.paid)}   Pendiente: ${currency(report.pending)}`);
     doc.moveDown();
-    if (report.level === "general") drawTable(doc, ["Inmueble", "Tipo", "Dirección", "Estado", "Renta"], report.properties.map(item => [item.name, item.type || "", item.address || "", item.status || "", currency(item.rent)]), [110, 70, 165, 70, 85]);
-    else drawTable(doc, ["Inmueble", "Inquilino", "Renta", "Pagos", "Saldo"], report.balances.map(row => [row.property?.name || "", row.tenant?.name || "", currency(row.rent), currency(row.paid), currency(row.balance)]), [120, 120, 85, 85, 90]);
+    if (report.level === "general") drawTable(doc, ["Inmueble", "Tipo", "Dirección", "Estado", "Referencia"], report.properties.map(item => [item.name, item.type || "", item.address || "", item.status || "", currency(item.rent)]), [110, 70, 165, 70, 85]);
+    else drawTable(doc, ["Inmueble", "Inquilino", "Neto", "Pagos", "Saldo"], report.balances.map(row => [row.property?.name || "", row.tenant?.name || "", currency(row.rent), currency(row.paid), currency(row.balance)]), [120, 120, 85, 85, 90]);
   }
+  doc.addPage();
+  doc.fillColor("#172033").font("Helvetica-Bold").fontSize(14).text("Desglose fiscal de rentas");
+  doc.font("Helvetica").fontSize(9).text("Renta bruta + IVA - retención IVA - retención ISR = neto a cobrar.\nImportes anteriores sin clasificar conservan su neto; la base no se presume.");
+  doc.moveDown();
+  drawTable(doc,["Periodo","Inmueble","Base","IVA","Ret. IVA","Ret. ISR","Neto"],fiscalRows(report).map(r=>r.slice(0,7).map((v,i)=>i<2?v:v==null?'—':currency(v))),[55,95,70,70,70,70,70]);
   doc.end();
   return done;
 }

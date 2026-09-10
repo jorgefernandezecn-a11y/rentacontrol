@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {calculateFiscal,normalizeFiscal,validateFiscalChange,suggestFiscal,netRent} from '../fiscal.js';
+import {makeReport,buildWorkbook,buildPdf} from '../api/reports.js';
+import ExcelJS from 'exceljs';
+export const draft={from:'2026-09',base:10000,landlord:'PM',tenant:'PM',regime:'general',use:'commercial',resident:true,iva:{mode:'percent',value:16},retIva:{mode:'percent',value:0},retIsr:{mode:'percent',value:0}};
+assert.equal(calculateFiscal(draft).net,11600);
+const pf={...draft,landlord:'PF'},withheld=calculateFiscal({...pf,...suggestFiscal(pf)});assert.equal(withheld.retIva.amount,1066.67);assert.equal(withheld.net,9533.33);
+assert.equal(calculateFiscal({...pf,regime:'resico',...suggestFiscal({...pf,regime:'resico'})}).net,10408.33);
+assert.equal(calculateFiscal({...draft,iva:{mode:'amount',value:1600},retIva:{mode:'amount',value:800},retIsr:{mode:'amount',value:1000}}).net,9800);
+assert.equal(calculateFiscal({...draft,...suggestFiscal({...draft,use:'housing'})}).net,10000);
+for(const v of [{resident:false},{use:'mixed'},{regime:'unknown'},{landlord:'unknown'}])assert.equal(suggestFiscal({...draft,...v}),null);
+for(const v of [{base:-1},{base:''},{from:'2026-13'},{iva:{mode:'percent',value:101}},{retIva:{mode:'amount',value:1601}},{retIsr:{mode:'amount',value:20000}}])assert.throws(()=>calculateFiscal({...draft,...v}));
+const legacy={rent:10000,start:'2026-01-01'},c={...legacy,fiscal:normalizeFiscal({legacyNet:10000,versions:[draft]})};
+assert.equal(netRent(c,'2026-08'),10000);assert.equal(netRent(c,'2026-09'),11600);validateFiscalChange(legacy,c,'2026-09');assert.throws(()=>validateFiscalChange(legacy,c,'2026-10'));assert.throws(()=>validateFiscalChange(c,{...legacy,fiscal:null},'2026-09'));
+const data={properties:[{id:'p',name:'Prueba fiscal',rent:10000,status:'Rentada'}],tenants:[{id:'t',name:'Inquilino fiscal'}],contracts:[{id:'c',property_id:'p',tenant_id:'t',start_date:'2026-08-01',rent:10000,rent_fiscal:c.fiscal,status:'Vigente'}],payments:[{contract_id:'c',period:'2026-09',amount:11600}],credits:[]};
+const report=makeReport(data,'balances','2026-09');assert.equal(report.pending,0);assert.equal(report.balances[0].balance,0);assert.equal(report.expected,11600);
+const statement=makeReport(data,'statement','2026-09','c');assert.equal(statement.totalCharges,21600);assert.equal(statement.balance,10000);
+await fs.mkdir('work/test-output',{recursive:true});
+for(const type of ['general','balances','statement']){const r=makeReport(data,type,'2026-09','c'),xlsx=await buildWorkbook(r),book=new ExcelJS.Workbook();await book.xlsx.load(xlsx);assert(book.getWorksheet('Desglose fiscal'));await fs.writeFile(`work/test-output/fiscal-${type}.xlsx`,Buffer.from(xlsx));await fs.writeFile(`work/test-output/fiscal-${type}.pdf`,await buildPdf(r))}
+console.log('PASS arithmetic, suggestions, manual amounts, invalid inputs, legacy periods, net balances and PDF/Excel exports');
