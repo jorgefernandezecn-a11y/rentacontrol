@@ -25,9 +25,9 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
 .report-actions,.document-actions{display:flex;gap:8px;flex-wrap:wrap}.document-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.document-card{border:1px solid var(--l);border-radius:13px;padding:12px}.document-card h4{margin:0 0 5px}.document-card .actions{justify-content:flex-start;margin-top:10px}.file-input{padding:8px;background:#fafbfe}
 .settings-list .row{align-items:flex-start}.settings-list select{max-width:230px;margin:0}.info-box{background:#fafbfe;border:1px solid var(--l);border-radius:14px;padding:13px;margin-top:10px}
 
-.auth-gate{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth-gate{overflow-y:auto;position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:24px}
 .access-locked .app,.access-locked nav,.access-locked .modal{visibility:hidden!important;pointer-events:none!important}.access-locked .auth-gate{display:flex!important}
-.auth-gate.hidden{display:none}.auth-box{width:min(440px,100%);background:#fff;border:1px solid var(--l);border-radius:22px;padding:22px}
+.auth-gate.hidden{display:none}.auth-box{max-height:100%;overflow-y:auto;width:min(440px,100%);background:#fff;border:1px solid var(--l);border-radius:22px;padding:22px}
 .auth-brand{font-size:28px;font-weight:800;margin-bottom:8px}.auth-brand span{color:var(--b)}
 .auth-msg{font-size:13px;margin-top:10px;color:var(--m)}.auth-msg.err{color:var(--r)}.auth-msg.ok{color:var(--g)}
 .auth-tabs{display:flex;gap:8px;margin:14px 0}.auth-tabs button{flex:1}
@@ -45,13 +45,22 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
       <button id="tabLogin" class="btn primary" type="button">Iniciar sesión</button>
       <button id="tabSignup" class="btn" type="button" style="display:none">Registro deshabilitado</button>
     </div>
-    <form id="authForm">
+    <form id="authForm" autocomplete="on">
       <label id="nameWrap" style="display:none">Nombre<input id="authName" autocomplete="name"></label>
       <label>Correo<input id="authEmail" name="username" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
       <label>Contraseña<input id="authPassword" name="password" type="password" autocomplete="current-password" minlength="8" required></label>
+      <label id="rememberUserWrap" style="display:flex;align-items:center;gap:8px"><input id="rememberUser" type="checkbox" style="width:auto;margin:0">Recordar usuario en este dispositivo</label>
       <button class="btn primary" style="width:100%;margin-top:12px" id="authSubmit">Entrar</button>
     </form>
-    <p class="meta">Identifícate cada vez que vuelvas a abrir la app. Puedes usar una contraseña guardada en Contraseñas de Apple, si está disponible en tu dispositivo.</p>
+    <p class="meta">Se pedirá tu contraseña al volver a abrir la app.</p>
+    <details id="iphonePasswordHelp" class="meta" style="margin:12px 0;line-height:1.5">
+      <summary style="cursor:pointer;color:var(--b)">Cómo guardar la contraseña en iPhone</summary>
+      <p>Si el iPhone ofrece guardar la contraseña al entrar, acepta. Si no aparece el aviso, abre la app <b>Contraseñas</b>, toca <b>+</b> y agrega:</p>
+      <p><b>Sitio web:</b> rentacontrol-ruddy.vercel.app<br><b>Usuario:</b> tu correo de RentaControl<br><b>Contraseña:</b> la que usas para entrar.</p>
+      <p>Después, toca el campo Contraseña y busca la opción Contraseñas o la llave del teclado para elegir la guardada. Su disponibilidad depende de la configuración del iPhone. En iOS 17 o anterior, busca Contraseñas en Configuración.</p>
+      <p>La contraseña se guarda en el gestor de Apple. “Recordar usuario” guarda solamente tu correo en este dispositivo.</p>
+      <a href="https://support.apple.com/es-mx/guide/iphone/iphf9219d8c9/ios" target="_blank" rel="noopener noreferrer">Ayuda de Apple</a>
+    </details>
     <button id="forgotPasswordBtn" type="button" class="btn" style="width:100%;margin-top:10px;border:0">¿Olvidaste tu contraseña?</button>
     <div id="authMsg" class="auth-msg">Solo pueden entrar usuarios autorizados por el Administrador.</div>
   </div>
@@ -735,6 +744,12 @@ downloadPendingBackup.onclick=()=>{
   const link=document.createElement('a');link.href=url;link.download='RentaControl-cambios-pendientes.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
 };
 let accessSuspended=false, loginInFlight=false;
+const rememberedUserKey='rentacontrol_remembered_user';
+function readRememberedUser(){try{return localStorage.getItem(rememberedUserKey)||''}catch{return ''}}
+function rememberSuccessfulUser(email){
+  try{if(rememberUser.checked)localStorage.setItem(rememberedUserKey,email);else localStorage.removeItem(rememberedUserKey)}catch{rememberUser.checked=false}
+}
+rememberUser.onchange=()=>{if(!rememberUser.checked){try{localStorage.removeItem(rememberedUserKey)}catch{}}};
 let signInPreparation=null;
 function prepareSignIn(){
   // Complete revocation before sending new credentials; never restore an old cookie.
@@ -833,6 +848,7 @@ authForm.onsubmit=async(e)=>{
     if(!cloud||!currentSession)throw new Error("No se pudieron cargar tus datos. Revisa tu conexión e inicia sesión nuevamente.");
     S=cloud;
     localStorage.setItem(K,JSON.stringify(S));
+    rememberSuccessfulUser(payload.email);
     hideAuth();
     badge(true,"☁️ Nube");
     render();
@@ -855,6 +871,7 @@ async function maybeResetPassword(){
   const token=new URLSearchParams(location.search).get("reset");
   if(!token)return false;
   showAuth();
+  rememberUserWrap.style.display="none";iphonePasswordHelp.style.display="none";
   tabLogin.style.display="none";tabSignup.style.display="none";forgotPasswordBtn.style.display="none";
   nameWrap.style.display="none";authEmail.closest("label").style.display="none";
   // Hidden login fields must not block native form validation during reset.
@@ -884,6 +901,9 @@ async function maybeResetPassword(){
   showAuth();
   render();
   if(await maybeResetPassword())return;
+  const rememberedEmail=readRememberedUser();
+  rememberUser.checked=!!rememberedEmail;
+  if(rememberedEmail)authEmail.value=rememberedEmail;
   try{await prepareSignIn()}catch{
     showAuth("Conéctate a internet para iniciar sesión.");
   }
