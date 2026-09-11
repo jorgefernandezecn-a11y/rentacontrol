@@ -88,6 +88,7 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
 <div id="modal" class="modal"><form id="form" class="sheet"><h2 id="ft"></h2><div id="fields"></div><div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>
 
 <script type="module">
+import {insuranceDetails} from "/insurance-fields.js";
 import {fiscalFor,netRent,calculateFiscal,suggestFiscal,validateFiscalChange,roundMoney} from "/fiscal.js";
 let currentSession=null,cloudRevision=null,syncFlight=null;
 const K='rentacontrol_v2',SK='rentacontrol_settings_v1',MO=()=>new Date().toISOString().slice(0,7),TD=()=>new Date().toISOString().slice(0,10);
@@ -285,6 +286,18 @@ function insuranceStatus(p){
   return {label:"Vigente",cls:"ok"};
 }
 function insuranceTypeIcon(t){return t==="Coche"?"🚗":t==="Inmueble"?"🏠":t==="Gastos médicos"?"🩺":"❤️"}
+function insuranceExtra(p){
+ const d=insuranceDetails(p.details),row=(label,value)=>`<div class="row"><span>${label}</span><b style="white-space:pre-wrap;overflow-wrap:anywhere">${H(value||'—')}</b></div>`;
+ if(p.type==='Coche')return row('Marca del vehículo',d.vehicleBrand)+row('Modelo',d.vehicleModel)+row('Año modelo',d.vehicleYear);
+ if(p.type==='Inmueble')return row('Dirección del inmueble',d.propertyAddress);
+ if(p.type==='Gastos médicos')return row('Asegurados',d.insuredPeople);
+ return '';
+}
+function updateInsuranceFields(){
+ const type=form.elements.type.value;
+ document.querySelectorAll('[data-insurance-type]').forEach(el=>{el.hidden=el.dataset.insuranceType!==type;el.querySelectorAll('input,textarea').forEach(input=>input.disabled=el.hidden)});
+ document.getElementById('insuranceBeneficiaryLabel').textContent=type==='Vida'?'Beneficiarios (uno por línea)':'Beneficiario';
+}
 function renderInsurance(){
   const a=S.insurance||[], active=a.filter(x=>insuranceStatus(x).label!=="Vencida").length,
         soon=a.filter(x=>insuranceStatus(x).cls==="warn").length, total=a.reduce((s,x)=>s+(+x.cost||0),0);
@@ -296,26 +309,30 @@ function renderInsurance(){
     <div class="row"><div><b>${insuranceTypeIcon(p.type)} ${p.type}</b><div class="meta">${p.company}</div></div><span class="pill ${st.cls}">${st.label}</span></div>
     <div class="meta">Póliza</div><b>${p.policyNumber||"—"}</b>
     <div class="meta" style="margin-top:8px">Vigencia</div><div>${p.validFrom||"—"} → ${p.validTo||"—"}</div>
-    <div class="meta" style="margin-top:8px">Beneficiario</div><div>${p.beneficiary||"—"}</div>
+    ${insuranceExtra(p)}<div class="meta" style="margin-top:8px">${p.type==='Vida'?'Beneficiarios':'Beneficiario'}</div><div style="white-space:pre-wrap">${H(p.beneficiary||"—")}</div>
     <div class="meta" style="margin-top:8px">Costo</div><b>${M(p.cost)}</b></div>`}).join("")||'<div class="card"><span class="meta">Aún no hay pólizas registradas.</span></div>';
   document.querySelectorAll("[data-ins]").forEach(x=>x.onclick=()=>insuranceDetail(x.dataset.ins));
 }
 function insuranceForm(id=null){
   if(isMaintenance()){alert("Tu perfil de Mantenimiento trabaja únicamente en Otros.");return}
   if(!guardWrite())return;
-  const p=id?(S.insurance||[]).find(x=>x.id===id):null;
+  const p=id?(S.insurance||[]).find(x=>x.id===id):null,d=insuranceDetails(p?.details);
   FT="insurance";E=id;CTX={view:"seguros"};ft.textContent=p?"Editar póliza":"Nueva póliza de seguro";
   fields.innerHTML=`<div class="two">
   <label>Tipo de seguro<select name="type" required>${["Coche","Inmueble","Gastos médicos","Vida"].map(x=>`<option ${p?.type===x?"selected":""}>${x}</option>`).join("")}</select></label>
   <label>Compañía<input name="company" value="${p?.company||""}" required></label>
   <label>Número de póliza<input name="policyNumber" value="${p?.policyNumber||""}" required></label>
-  <label>Beneficiario<input name="beneficiary" value="${p?.beneficiary||""}"></label>
+  <label><span id="insuranceBeneficiaryLabel">Beneficiario</span><textarea name="beneficiary" rows="3">${H(p?.beneficiary||"")}</textarea></label>
   <label>Inicio de vigencia<input type="date" name="validFrom" value="${p?.validFrom||""}"></label>
   <label>Fin de vigencia<input type="date" name="validTo" value="${p?.validTo||""}"></label>
   <label>Costo<input type="number" min="0" step="0.01" name="cost" value="${p?.cost??0}" required></label></div>
+  <div data-insurance-type="Coche"><h3>Vehículo asegurado</h3><div class="two"><label>Marca del vehículo<input name="vehicleBrand" maxlength="100" value="${H(d.vehicleBrand)}"></label><label>Modelo<input name="vehicleModel" maxlength="100" value="${H(d.vehicleModel)}"></label><label>Año modelo<input type="number" min="1886" max="2200" step="1" name="vehicleYear" value="${H(d.vehicleYear)}"></label></div></div>
+  <div data-insurance-type="Inmueble"><label>Dirección del inmueble asegurado<textarea name="propertyAddress" maxlength="1000" rows="3">${H(d.propertyAddress)}</textarea></label></div>
+  <div data-insurance-type="Gastos médicos"><label>Asegurados (uno por línea)<textarea name="insuredPeople" maxlength="5000" rows="4">${H(d.insuredPeople)}</textarea></label></div>
   <label>Recordarme antes del vencimiento</label><div class="info-box" style="display:flex;gap:14px;flex-wrap:wrap">${[30,15,7,1].map(day=>`<label style="display:flex;align-items:center;gap:6px;margin:0;color:var(--t)"><input type="checkbox" name="reminder_${day}" style="width:auto;margin:0" ${(p?.reminderDays||[30,15,7,1]).includes(day)?"checked":""}> ${day} día${day===1?"":"s"} antes</label>`).join("")}</div>
   <label>Notas<textarea name="notes" rows="3">${p?.notes||""}</textarea></label>
   ${p?'':`<div class="info-box"><b>Documentos de la póliza</b><div class="meta">Después de guardar se abrirá la póliza para que puedas subir la copia y otros archivos.</div></div>`}`;
+  form.elements.type.onchange=updateInsuranceFields;updateInsuranceFields();
   modal.classList.add("on");
 }
 function insuranceDetail(id){
@@ -324,7 +341,7 @@ function insuranceDetail(id){
   <div class="row"><div><h2 style="margin:0">${insuranceTypeIcon(p.type)} ${p.type}</h2><div class="meta">${p.company}</div></div><span class="pill ${st.cls}">${st.label}</span></div>
   <div class="row"><span>Número de póliza</span><b>${p.policyNumber||"—"}</b></div>
   <div class="row"><span>Vigencia</span><b>${p.validFrom||"—"} → ${p.validTo||"—"}</b></div>
-  <div class="row"><span>Beneficiario</span><b>${p.beneficiary||"—"}</b></div>
+  ${insuranceExtra(p)}<div class="row"><span>${p.type==='Vida'?'Beneficiarios':'Beneficiario'}</span><b style="white-space:pre-wrap;overflow-wrap:anywhere">${H(p.beneficiary||"—")}</b></div>
   <div class="row"><span>Costo</span><b>${M(p.cost)}</b></div><div class="row"><span>Recordatorios</span><b>${(p.reminderDays||[30,15,7,1]).join(", ")} días antes</b></div>${p.notes?`<div class="info-box">${p.notes}</div>`:""}
   ${currentSession?.role==="Consulta"?"":`<div class="actions"><button class="btn" id="editIns">Editar</button><button class="btn danger" id="deleteIns">Eliminar</button></div>`}</div>
   <div class="card" style="margin-top:12px"><div class="toolbar"><div><h3 style="margin:0">Copia de la póliza y documentos</h3><div class="meta">PDF, imágenes, Word, Excel y otros archivos relacionados</div></div>${['Administrador','Cobranza'].includes(currentSession?.role)?'<button class="btn primary" id="uploadInsuranceDocument">+ Archivo</button>':''}</div><div id="insuranceDocuments" class="document-grid"><span class="meta">Cargando documentos...</span></div></div>`;
@@ -576,7 +593,7 @@ form.onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData
  }
  if(FT==='credit')S.credits.push({id:ID('cr'),contractId:d.cid,amount:+d.amount||0,date:d.date,note:d.note||'Pago a cuenta'});
  if(FT==='insurance'){
- const existingId=E,rec={id:existingId||ID('ins'),type:d.type,company:d.company.trim(),policyNumber:d.policyNumber.trim(),validFrom:d.validFrom||'',validTo:d.validTo||'',beneficiary:d.beneficiary.trim(),cost:+d.cost||0,reminderDays:[30,15,7,1].filter(day=>d['reminder_'+day]==='on'),notes:d.notes||''};E=rec.id;
+ const existingId=E,rec={id:existingId||ID('ins'),type:d.type,company:d.company.trim(),policyNumber:d.policyNumber.trim(),validFrom:d.validFrom||'',validTo:d.validTo||'',beneficiary:d.beneficiary.trim(),details:insuranceDetails(Object.fromEntries(['vehicleBrand','vehicleModel','vehicleYear','propertyAddress','insuredPeople'].map(k=>[k,form.elements[k].value]))),cost:+d.cost||0,reminderDays:[30,15,7,1].filter(day=>d['reminder_'+day]==='on'),notes:d.notes||''};E=rec.id;
  if(existingId){const i=S.insurance.findIndex(x=>x.id===existingId);if(i>=0)S.insurance[i]=rec}else S.insurance.push(rec);
  localStorage.setItem(K,JSON.stringify(S));render();modal.classList.remove('on');await saveCloud();const saved=S.insurance.find(x=>x.policyNumber===rec.policyNumber&&x.company===rec.company);if(saved)insuranceDetail(saved.id);return;
 }
