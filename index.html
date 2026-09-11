@@ -26,6 +26,7 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
 .settings-list .row{align-items:flex-start}.settings-list select{max-width:230px;margin:0}.info-box{background:#fafbfe;border:1px solid var(--l);border-radius:14px;padding:13px;margin-top:10px}
 
 .auth-gate{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:24px}
+.access-locked .app,.access-locked nav,.access-locked .modal{visibility:hidden!important;pointer-events:none!important}.access-locked .auth-gate{display:flex!important}
 .auth-gate.hidden{display:none}.auth-box{width:min(440px,100%);background:#fff;border:1px solid var(--l);border-radius:22px;padding:22px}
 .auth-brand{font-size:28px;font-weight:800;margin-bottom:8px}.auth-brand span{color:var(--b)}
 .auth-msg{font-size:13px;margin-top:10px;color:var(--m)}.auth-msg.err{color:var(--r)}.auth-msg.ok{color:var(--g)}
@@ -34,7 +35,7 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
 @media(max-width:760px){.grid,.stats,.two,.document-grid{grid-template-columns:1fr}.toolbar{flex-direction:column}.settings-list .row{flex-direction:column}.settings-list select{max-width:none}}
 </style>
 </head>
-<body>
+<body class="access-locked">
 
 <div id="authGate" class="auth-gate">
   <div class="auth-box">
@@ -46,10 +47,11 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
     </div>
     <form id="authForm">
       <label id="nameWrap" style="display:none">Nombre<input id="authName" autocomplete="name"></label>
-      <label>Correo<input id="authEmail" type="email" autocomplete="email" required></label>
-      <label>Contraseña<input id="authPassword" type="password" autocomplete="current-password" minlength="8" required></label>
+      <label>Correo<input id="authEmail" name="username" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Contraseña<input id="authPassword" name="password" type="password" autocomplete="current-password" minlength="8" required></label>
       <button class="btn primary" style="width:100%;margin-top:12px" id="authSubmit">Entrar</button>
     </form>
+    <p class="meta">Identifícate cada vez que vuelvas a abrir la app. Puedes usar una contraseña guardada en Contraseñas de Apple, si está disponible en tu dispositivo.</p>
     <button id="forgotPasswordBtn" type="button" class="btn" style="width:100%;margin-top:10px;border:0">¿Olvidaste tu contraseña?</button>
     <div id="authMsg" class="auth-msg">Solo pueden entrar usuarios autorizados por el Administrador.</div>
   </div>
@@ -75,6 +77,7 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
 <section id="detalle" class="view"><div id="detail"></div></section>
 
 <section id="configuracion" class="view"><div class="toolbar"><div><h1>Configuración</h1><p class="sub">Cuenta, usuarios y preferencias</p></div><button class="btn" id="closeSettings">Cerrar</button></div><div class="card settings-list">
+<div class="row" id="pendingBackupRow" style="display:none"><div><b>Cambios pendientes</b><div class="meta">Copia local para revisar; no modifica los datos de la nube.</div></div><button class="btn" id="downloadPendingBackup">Descargar copia</button></div>
 <div class="row"><div><b>Sesión</b><div class="meta" id="sessionText">Sesión local activa</div></div><button class="btn" id="signOutBtn">Sign out</button></div>
 <div class="row"><div><b>Usuarios</b><div class="meta">Cuentas autorizadas para entrar a RentaControl</div></div><button class="btn" id="manageUsers">Administrar</button></div>
 <div class="row"><div><b>Permisos</b><div class="meta">Administrador, Cobranza, Mantenimiento o Consulta</div></div><button class="btn" id="managePerms">Ver roles</button></div>
@@ -90,6 +93,7 @@ nav button{border:0;background:#fff;padding:9px 2px;color:var(--m);font-size:10p
 <script type="module">
 import {insuranceDetails} from "/insurance-fields.js";
 import {fiscalFor,netRent,calculateFiscal,suggestFiscal,validateFiscalChange,roundMoney} from "/fiscal.js";
+let accessEpoch=0;
 let currentSession=null,cloudRevision=null,syncFlight=null;
 const K='rentacontrol_v2',SK='rentacontrol_settings_v1',MO=()=>new Date().toISOString().slice(0,7),TD=()=>new Date().toISOString().slice(0,10);
 let CFG=JSON.parse(localStorage.getItem(SK)||'null')||{language:'es',currency:'MXN',signedIn:true,users:[{id:'u1',name:'Administrador',role:'Administrador'}],password:'1234'};
@@ -109,6 +113,8 @@ function guardWrite(){
   return false;
 }
 function applyRoleUI(){
+  const backup=JSON.parse(localStorage.getItem(K+'_pending_backup')||'null');
+  pendingBackupRow.style.display=currentSession&&backup?.userId===currentSession.id?'flex':'none';
   const role=currentSession?.role||"";
   const readonly=role==="Consulta";
   ["newProp","newTenant","newPay","newInsurance"].forEach(id=>{
@@ -135,14 +141,18 @@ let prev='inicio',FT='',E=null,CTX=null,syncTimer;
 function badge(ok,txt){cloudState.className='cloud '+(ok===true?'ok':ok===false?'bad':'');cloudState.textContent=txt}
 function hasData(x){return !!(x&&(x.properties?.length||x.tenants?.length||x.contracts?.length||x.payments?.length||x.credits?.length||x.maintenance?.length||x.insurance?.length))}
 async function cloudFetch(url,options={}){
+  if(accessSuspended||!currentSession)throw new Error("AUTH_REQUIRED");
+  const epoch=accessEpoch;
   const r=await fetch(url,{...options,credentials:"same-origin",cache:"no-store"});
-  if(r.status===401)throw new Error("AUTH_REQUIRED");
+  if(epoch!==accessEpoch||accessSuspended||r.status===401)throw new Error("AUTH_REQUIRED");
   if(r.status===403){
     const j=await r.clone().json().catch(()=>({}));
     const e=new Error(j.error||"No tienes permiso para realizar esta acción.");
     e.code="FORBIDDEN";
     throw e;
   }
+  const decode=r.json.bind(r);
+  r.json=async()=>{const value=await decode();if(epoch!==accessEpoch||accessSuspended)throw new Error("AUTH_REQUIRED");return value};
   return r;
 }
 async function loadCloud(){try{let r=await cloudFetch('/api/state');if(!r.ok)throw new Error(await r.text());let j=await r.json();if(j.user)currentSession=j.user;cloudRevision=j.revision;pendingCloudSync=false;syncAttempts=0;badge(true,'☁️ Nube');return j.state}catch(e){console.warn(e);if(e.message==="AUTH_REQUIRED")showAuth("Tu sesión expiró. Inicia sesión nuevamente.");else if(e.code==="FORBIDDEN")alert(e.message);else{badge(false,'⏳ Esperando nube');pendingCloudSync=true}return null}}
@@ -700,7 +710,7 @@ function passwordForm(){
   modal.classList.add("on");
 }
 
-settingsBtn.onclick=()=>show('configuracion');closeSettings.onclick=()=>show(prev==='configuracion'?'inicio':prev);languageSel.onchange=()=>{CFG.language=languageSel.value;saveCfg()};currencySel.onchange=()=>{CFG.currency=currencySel.value;saveCfg()};signOutBtn.onclick=async()=>{await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({action:"logout"})});currentSession=null;showAuth("Sesión cerrada.");};
+settingsBtn.onclick=()=>show('configuracion');closeSettings.onclick=()=>show(prev==='configuracion'?'inicio':prev);languageSel.onchange=()=>{CFG.language=languageSel.value;saveCfg()};currencySel.onchange=()=>{CFG.currency=currencySel.value;saveCfg()};signOutBtn.onclick=()=>{suspendAccess();location.reload();};
 manageUsers.onclick=usersPage;
 managePerms.onclick=rolesPage;
 changePass.onclick=passwordForm;
@@ -718,13 +728,54 @@ function setAuthMode(mode){
   authMsg.className="auth-msg";
   authMsg.textContent="Solo pueden entrar usuarios autorizados por el Administrador.";
 }
+downloadPendingBackup.onclick=()=>{
+  const backup=JSON.parse(localStorage.getItem(K+'_pending_backup')||'null');
+  if(!currentSession||backup?.userId!==currentSession.id)return;
+  const url=URL.createObjectURL(new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='RentaControl-cambios-pendientes.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+};
+let accessSuspended=false, loginInFlight=false;
+let signInPreparation=null;
+function prepareSignIn(){
+  // Complete revocation before sending new credentials; never restore an old cookie.
+  return signInPreparation ||= authRequest({action:"logout"}).catch(error=>{
+    signInPreparation=null;
+    throw error;
+  });
+}
+function suspendAccess(){
+  if(accessSuspended)return;
+  accessSuspended=true;
+  const previousUser=currentSession, hadPendingChanges=pendingCloudSync;
+  currentSession=null;
+  authPassword.value="";
+  showAuth("Identifícate para continuar.");
+  clearTimeout(syncTimer);
+  if(hadPendingChanges&&previousUser){
+    try{localStorage.setItem(K+'_pending_backup',JSON.stringify({userId:previousUser.id,savedAt:new Date().toISOString(),state:S}))}catch(error){console.warn("No se pudo guardar la copia pendiente",error)}
+  }
+  pendingCloudSync=false;
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'&&(currentSession||loginInFlight))suspendAccess();
+  else if(document.visibilityState==='visible'&&accessSuspended)location.reload();
+});
+window.addEventListener('pagehide',suspendAccess);
+window.addEventListener('pageshow',event=>{if(event.persisted)location.reload()});
 function showAuth(message=""){
+  accessEpoch++;
+  clearTimeout(syncTimer);
+  pendingCloudSync=false;
+  currentSession=null;
+  document.body.classList.add("access-locked");
   authGate.classList.remove("hidden");
   document.querySelector(".app").style.visibility="hidden";
   document.querySelector("nav").style.visibility="hidden";
   if(message){authMsg.className="auth-msg err";authMsg.textContent=message}
 }
 function hideAuth(){
+  if(accessSuspended||!currentSession)return;
+  document.body.classList.remove("access-locked");
   authGate.classList.add("hidden");
   document.querySelector(".app").style.visibility="visible";
   document.querySelector("nav").style.visibility="visible";
@@ -761,6 +812,8 @@ async function authRequest(payload){
 
 authForm.onsubmit=async(e)=>{
   e.preventDefault();
+  if(loginInFlight||accessSuspended)return;
+  loginInFlight=true;
   authSubmit.disabled=true;
   authMsg.className="auth-msg";
   authMsg.textContent="Verificando...";
@@ -770,19 +823,29 @@ authForm.onsubmit=async(e)=>{
       email:authEmail.value.trim(),
       password:authPassword.value
     };
+    await prepareSignIn();
+    if(accessSuspended)return;
     const result=await authRequest(payload);
+    if(accessSuspended)return;
     currentSession=result.user;
     const cloud=await loadCloud();
-    if(cloud)S=cloud;
+    if(accessSuspended)return;
+    if(!cloud||!currentSession)throw new Error("No se pudieron cargar tus datos. Revisa tu conexión e inicia sesión nuevamente.");
+    S=cloud;
     localStorage.setItem(K,JSON.stringify(S));
     hideAuth();
     badge(true,"☁️ Nube");
     render();
     show(currentSession?.role==="Mantenimiento"?"mantenimiento":"inicio");
+    const backup=JSON.parse(localStorage.getItem(K+'_pending_backup')||'null');
+    if(backup?.userId===currentSession.id)alert("Hay una copia local de cambios que estaban pendientes al salir. No se ha aplicado sobre los datos de la nube. Puedes descargarla desde Configuración para revisarla.");
   }catch(err){
+    showAuth();
     authMsg.className="auth-msg err";
     authMsg.textContent=err.message||"No fue posible iniciar sesión.";
   }finally{
+    authPassword.value="";
+    loginInFlight=false;
     authSubmit.disabled=false;
   }
 };
@@ -818,36 +881,12 @@ async function maybeResetPassword(){
   return true;
 }
 (async()=>{
+  showAuth();
   render();
   if(await maybeResetPassword())return;
-  try{
-    const r=await fetch("/api/auth?action=session",{credentials:"same-origin",cache:"no-store"});
-    if(r.ok){
-      const j=await r.json();
-      currentSession=j.user;
-      const cloud=await loadCloud();
-      if(cloud){
-        S=cloud;
-        localStorage.setItem(K,JSON.stringify(S));
-        hideAuth();badge(true,"☁️ Nube");render();
-        if(currentSession?.role==="Mantenimiento")show("mantenimiento");
-        return;
-      }
-      // Sesión válida pero la nube aún no respondió: conserva temporalmente la
-      // captura local y sigue reintentando, sin marcarla falsamente como Nube.
-      hideAuth();
-      pendingCloudSync=true;
-      badge(false,"⏳ Esperando nube");
-      render();
-      clearTimeout(syncTimer);
-      syncTimer=setTimeout(()=>loadCloud().then(fresh=>{
-        if(fresh){S=fresh;localStorage.setItem(K,JSON.stringify(S));render()}
-      }),1800);
-      if(currentSession?.role==="Mantenimiento")show("mantenimiento");
-      return;
-    }
-  }catch(e){console.warn(e)}
-  showAuth();
+  try{await prepareSignIn()}catch{
+    showAuth("Conéctate a internet para iniciar sesión.");
+  }
 })();
 </script>
 </body></html>
