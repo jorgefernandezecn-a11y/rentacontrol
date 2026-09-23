@@ -1,6 +1,6 @@
 # RentaControl — correcciones de inmuebles
 
-Estado: preparado y probado localmente. No publicado. Validación directa en Neon pendiente.
+Estado: correcciones validadas localmente y contra una rama aislada de Neon. Publicación en preparación.
 
 ## Causas y correcciones
 
@@ -18,11 +18,16 @@ Estado: preparado y probado localmente. No publicado. Validación directa en Neo
 4. Regresión de acceso en navegador: inicio/cierre, segundo plano, permisos, errores de nube, recuperación de contraseña y recordar usuario.
 5. Sintaxis JavaScript y revisión del diff sin errores.
 
-## Pendiente antes de publicar
+## Validación directa en Neon
 
-El conector Neon está instalado y habilitado pero rechaza llamadas indicando que falta project_id. Su interfaz actual no expone ese parámetro y tampoco lo transmite al suministrarlo. No se verificaron permisos SQL ni foreign keys contra la base viva. Las migraciones del repositorio contienen ON DELETE CASCADE para documentos; el archivado evita ejecutar esas eliminaciones.
+El conector rechazaba project_id; se accedió al panel oficial con la sesión iniciada por el usuario. Se creó desde main la rama temporal test-property-fixes-20260923 (br-purple-math-a6rslh8c), con caducidad automática de un día.
 
-Se amplió test/entity-deletion.mjs para comprobar fechas, clientes antiguos, UUID, archivado sin dependencias, relaciones e historial en una rama aislada de Neon. Esa prueba no se ejecutó en esta sesión por el bloqueo del conector.
+- test/entity-deletion.mjs pasó contra la base real: UUID estable, fechas sin inquilino persistentes, protección ante clientes antiguos, archivado sin dependencias y sincronización posterior, permisos de los roles, conservación de pagos/anticipos/depósitos/mantenimiento/documentos, terminación de contratos y concurrencia.
+- Se compararon los registros originales antes/después y se limpiaron los datos sintéticos. La producción no recibió escrituras de pruebas.
+- Se revisaron las foreign keys reales: contratos, pagos, créditos y mantenimiento tienen referencias restrictivas; documentos de inmueble y póliza tienen ON DELETE CASCADE. La acción usa archivado y no activa esos borrados.
+- El rol de la aplicación tiene SELECT/INSERT/UPDATE sobre properties y SELECT/INSERT sobre audit_log.
+- Recorrido en navegador conectado al backend real y a Neon completado: alta, sincronización, edición, fecha tras recarga, cancelar sin solicitud, confirmación del inmueble exacto, archivado y nueva recarga.
+- La versión preliminar en Vercel compiló correctamente: dpl_GdR87zSqNBfpDR2u8XxDPaa6JbZV.
 
 Repositorio: jorgefernandezecn-a11y/rentacontrol.
 Base verificada en GitHub: 7646c52c86552bcc52bfda5b4386d2c2249efea1.
