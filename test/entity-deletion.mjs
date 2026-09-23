@@ -33,7 +33,22 @@ async function fixture(name){
 let server;
 try{
  for(const role of ['Administrador','Cobranza','Mantenimiento','Consulta','Inactive'])await user(role);
- const baseline=await snapshot(),f=await fixture('Prueba terminación');
+ const baseline=await snapshot();
+ // Regression: a newly created UUID remains addressable after Neon synchronization.
+ const propertyId=crypto.randomUUID();ids.properties.push(propertyId);
+ const draft={start:'2026-09-01',end:'2027-09-30',dueDay:5};
+ const newProperty={id:propertyId,name:'PRUEBA INMUEBLE SIN DEPENDENCIAS',rent:10000,deposit:0,status:'Disponible',contractDraft:draft};
+ let state=structuredClone(baseline.state);state.properties.push(newProperty);
+ const savedProperty=await call('PUT',{state,revision:baseline.revision});assert.equal(savedProperty.statusCode,200,JSON.stringify(savedProperty.body));
+ assert.deepEqual(savedProperty.body.state.properties.find(p=>p.id===propertyId).contractDraft,draft);
+ assert.deepEqual((await snapshot()).state.properties.find(p=>p.id===propertyId).contractDraft,draft);
+ let freshProperty=await snapshot();const legacy=structuredClone(freshProperty.state);delete legacy.properties.find(p=>p.id===propertyId).contractDraft;
+ const preserved=await call('PUT',{state:legacy,revision:freshProperty.revision});assert.equal(preserved.statusCode,200,JSON.stringify(preserved.body));assert.deepEqual(preserved.body.state.properties.find(p=>p.id===propertyId).contractDraft,draft);
+ const archivedProperty=await del('property',propertyId);assert.equal(archivedProperty.statusCode,200);assert(archivedProperty.body.state.properties.find(p=>p.id===propertyId).archivedAt);
+ assert((await snapshot()).state.properties.find(p=>p.id===propertyId).archivedAt);
+ const roundtrip=await call('PUT',{state:archivedProperty.body.state,revision:archivedProperty.body.revision});assert.equal(roundtrip.statusCode,200,JSON.stringify(roundtrip.body));
+ console.log('PASS new property UUID, draft dates roundtrip, legacy-client preservation, archive without dependencies and post-archive synchronization');
+ const f=await fixture('Prueba terminación');
  for(const role of ['Mantenimiento','Consulta','Inactive','Anonymous'])for(const entity of ['property','tenant','contract'])assert.equal((await del(entity,f[entity==='property'?'p':entity==='tenant'?'t':'c'],role)).statusCode,role==='Anonymous'?401:403);
  console.log('PASS authorization for all three entity types');
  const before=await snapshot();
