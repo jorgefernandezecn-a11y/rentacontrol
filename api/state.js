@@ -39,6 +39,28 @@ const fail=(status,message)=>Object.assign(new Error(message),{status});
 async function archiveRecord(c,entity,id,user,details){
   await c.query("insert into audit_log(user_id,action,entity_type,entity_id,details) values($1,'archive',$2,$3,$4)",[user.id,entity,id,details]);
 }
+async function correctPayment(c,body,user,method){
+  if(!['Administrador','Cobranza'].includes(user.role))throw fail(403,'Tu perfil no puede corregir pagos.');
+  if(!isUuid(body.id))throw fail(400,'Pago no válido.');
+  const before=(await c.query('select * from payments where id=$1 for update',[body.id])).rows[0];
+  if(!before)throw fail(404,'El pago ya no existe. Actualiza la información.');
+  const reason=String(body.reason||'').trim();
+  if(!reason||reason.length>1000)throw fail(400,'Escribe el motivo de la corrección (máximo 1000 caracteres).');
+  let after=null;
+  if(method==='DELETE'){
+    if(body.confirmed!==true)throw fail(400,'Confirma la eliminación del pago.');
+  }else{
+    const v=body.payment||{};
+    if(!isUuid(v.contractId)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(v.period)||!validDate(v.date)||new Date(v.date+'T12:00:00Z').toISOString().slice(0,10)!==v.date||typeof v.amount!=='number'||!Number.isFinite(v.amount)||v.amount<=0||v.amount>1e10||Math.abs(v.amount*100-Math.round(v.amount*100))>0.0001)throw fail(400,'Revisa contrato, periodo, fecha e importe positivo con hasta dos decimales.');
+    const contract=(await c.query('select id from contracts where id=$1',[v.contractId])).rows[0];
+    if(!contract)throw fail(400,'El contrato seleccionado no existe.');
+    after={contractId:v.contractId,period:v.period,date:v.date,amount:v.amount,method:String(v.method||'').slice(0,100),notes:String(v.notes||'').slice(0,2000)};
+  }
+  // The audit and correction commit together; original payment stays available in the audit.
+  await c.query("insert into audit_log(user_id,action,entity_type,entity_id,details) values($1,$2,'payment',$3,$4)",[user.id,method==='DELETE'?'payment_delete':'payment_edit',body.id,{before,after,reason}]);
+  if(method==='DELETE')await c.query('delete from payments where id=$1',[body.id]);
+  else await c.query('update payments set contract_id=$2,period=$3,amount=$4,payment_date=$5,method=$6,notes=$7 where id=$1',[body.id,after.contractId,after.period,after.amount,after.date,after.method,after.notes]);
+}
 async function deleteEntity(c,body,user){
   const table={property:'properties',tenant:'tenants',contract:'contracts'}[body.entity];
   if(!table||!isUuid(body.id))throw fail(400,'Registro no válido.');
@@ -76,9 +98,11 @@ export default async function handler(req,res){
     if(!a.ok)throw fail(a.status,a.error);
     const before=await readState(c);
     if(req.method!=='GET'){
-      if(!['PUT','DELETE'].includes(req.method))throw fail(405,'Método no permitido.');
+      if(!['PUT','DELETE','PATCH'].includes(req.method))throw fail(405,'Método no permitido.');
       if(req.body?.revision!==revisionOf(before))throw fail(409,'La información cambió o esta versión necesita actualizarse. Cierra y vuelve a abrir la app antes de repetir el cambio.');
-      if(req.method==='DELETE')await deleteEntity(c,req.body,a.user);
+      if(['PATCH','DELETE'].includes(req.method)&&req.body?.entity==='payment')await correctPayment(c,req.body,a.user,req.method);
+      else if(req.method==='PATCH')throw fail(400,'Corrección no válida.');
+      else if(req.method==='DELETE')await deleteEntity(c,req.body,a.user);
       else{
         if(!req.body?.state)throw fail(400,'state requerido');
         const submitted=structuredClone(req.body.state);

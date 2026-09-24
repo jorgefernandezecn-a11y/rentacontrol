@@ -1,0 +1,22 @@
+import http from 'node:http';import fs from 'node:fs/promises';
+const source=await fs.readFile(new URL('../index.html',import.meta.url),'utf8');
+const helpers=source.slice(source.indexOf("document.addEventListener('click',event=>{\n const edit="),source.indexOf("function payForm(cid="));
+const account=source.slice(source.indexOf('function account('),source.indexOf('function totals('));
+const page=String.raw`<!doctype html><meta charset=utf-8><pre id=results>Probando…</pre><div id=modal><form id=form><h2 id=ft></h2><div id=fields></div><button id=submit>Guardar</button></form></div><script type=module>
+import {netRent,roundMoney} from '/fiscal.js';
+let FT,E,CTX,role='Administrador',pendingCloudSync=false,syncFlight=null,cloudRevision='1',calls=[],fail=false;
+let S={contracts:[{id:'c',tenantId:'t',propertyId:'p',rent:10000}],payments:[{id:'a',contractId:'c',period:'2026-09',date:'2026-09-24',amount:1000,method:'Efectivo',notes:'Original'},{id:'b',contractId:'c',period:'2026-09',date:'2026-09-24',amount:2000,method:'Efectivo'}],credits:[]};
+const form=document.getElementById('form'),fields=document.getElementById('fields'),ft=document.getElementById('ft'),modal=document.getElementById('modal'),period={value:'2026-09'},K='synthetic-payment-test',MO=()=>period.value,C=id=>S.contracts.find(c=>c.id===id),T=()=>({name:'Inquilino prueba'}),P=()=>({name:'Inmueble prueba'}),H=v=>String(v??''),M=v=>Number(v).toFixed(2),canDeleteEntity=()=>['Administrador','Cobranza'].includes(role),render=()=>{},badge=()=>{},acct=()=>{},saveCloud=async()=>true;
+const cloudFetch=async(url,options)=>{calls.push(options);if(fail)return {ok:false,json:async()=>({error:'Conflicto de revisión'})};const body=JSON.parse(options.body),next=structuredClone(S);if(options.method==='DELETE')next.payments=next.payments.filter(p=>p.id!==body.id);else Object.assign(next.payments.find(p=>p.id===body.id),body.payment);return {ok:true,json:async()=>({state:next,revision:String(Number(cloudRevision)+1)})}};
+`+account+helpers+String.raw`
+const check=(v,m)=>{if(!v)throw Error(m)},lines=[],pass=m=>lines.push('PASS '+m),submit=document.getElementById('submit');
+form.onsubmit=e=>e.preventDefault();
+try{
+check(account(C('c')).balance===7000,'Saldo inicial');paymentCorrectionForm('a');check(form.elements.amount.value==='1000','No precarga importe');check(form.elements.notes.value==='Original','No precarga notas');form.elements.amount.value='3000';form.elements.reason.value='Corregir importe';await savePaymentCorrection(submit);check(account(C('c')).balance===5000,'Saldo edición');check(S.payments.find(p=>p.id==='b').amount===2000,'Cambió otro pago');pass('Edición exacta precarga datos y recalcula saldo');
+paymentCorrectionForm('a');form.elements.period.value='2026-10';form.elements.reason.value='Mes incorrecto';await savePaymentCorrection(submit);check(account(C('c')).balance===8000,'Mes original');check(account(C('c'),'2026-10').balance===7000,'Mes destino');pass('Cambiar periodo corrige ambos meses');
+paymentCorrectionForm('b',true);check(!form.checkValidity(),'Eliminar no exige motivo y confirmación');const n=calls.length;modal.classList.remove('on');check(calls.length===n,'Cancelar envió petición');pass('Eliminar requiere confirmación y motivo; abrir no elimina');
+paymentCorrectionForm('b',true);form.elements.reason.value='Duplicado';form.elements.confirmed.checked=true;fail=true;await savePaymentCorrection(submit);check(S.payments.some(p=>p.id==='b'),'Error quitó el pago');check(!submit.disabled,'No permite reintentar');check(document.getElementById('paymentCorrectionError').textContent.includes('Conflicto'),'Error oculto');fail=false;await savePaymentCorrection(submit);check(!S.payments.some(p=>p.id==='b'),'No elimina');check(account(C('c')).balance===10000,'Saldo eliminación');check(S.payments.some(p=>p.id==='a'),'Eliminó otro');pass('Conflicto conserva pago; reintento elimina solo el indicado y recalcula');
+role='Consulta';modal.classList.remove('on');paymentCorrectionForm('a');check(!modal.classList.contains('on'),'Consulta puede corregir');pass('Consulta sin acceso a correcciones');results.textContent=lines.join('\n')+'\nTODAS LAS PRUEBAS PASARON';
+}catch(e){results.textContent=lines.join('\n')+'\nFAIL '+e.stack}
+</script>`;
+http.createServer(async(req,res)=>{res.setHeader('Content-Type',req.url==='/fiscal.js'?'text/javascript':'text/html');res.end(req.url==='/fiscal.js'?await fs.readFile(new URL('../fiscal.js',import.meta.url)):page)}).listen(4188,'127.0.0.1',()=>console.log('http://127.0.0.1:4188'));
