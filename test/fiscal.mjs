@@ -9,7 +9,9 @@ const pf={...draft,landlord:'PF'},withheld=calculateFiscal({...pf,...suggestFisc
 assert.equal(calculateFiscal({...pf,regime:'resico',...suggestFiscal({...pf,regime:'resico'})}).net,10408.33);
 assert.equal(calculateFiscal({...draft,iva:{mode:'amount',value:1600},retIva:{mode:'amount',value:800},retIsr:{mode:'amount',value:1000}}).net,9800);
 assert.equal(calculateFiscal({...draft,...suggestFiscal({...draft,use:'housing'})}).net,10000);
-for(const v of [{resident:false},{use:'mixed'},{regime:'unknown'},{landlord:'unknown'}])assert.equal(suggestFiscal({...draft,...v}),null);
+for(const v of [{resident:false},{use:'mixed'},{landlord:'unknown'}])assert.equal(suggestFiscal({...draft,...v}),null);
+assert.equal(suggestFiscal({...draft,regime:'unknown'}).iva.value,16);
+assert.equal(suggestFiscal({...pf,regime:'unknown'}),null);
 for(const v of [{base:-1},{base:''},{from:'2026-13'},{iva:{mode:'percent',value:101}},{retIva:{mode:'amount',value:1601}},{retIsr:{mode:'amount',value:20000}}])assert.throws(()=>calculateFiscal({...draft,...v}));
 const legacy={rent:10000,start:'2026-01-01'},c={...legacy,fiscal:normalizeFiscal({legacyNet:10000,versions:[draft]})};
 assert.equal(netRent(c,'2026-08'),10000);assert.equal(netRent(c,'2026-09'),11600);validateFiscalChange(legacy,c,'2026-09');assert.throws(()=>validateFiscalChange(legacy,c,'2026-10'));assert.throws(()=>validateFiscalChange(c,{...legacy,fiscal:null},'2026-09'));

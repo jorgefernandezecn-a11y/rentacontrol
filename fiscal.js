@@ -52,7 +52,8 @@ export function validateFiscalChange(before,after,currentMonth){
 }
 // Suggestions require an explicit confirmation of Mexican residence and ordinary rules.
 export function suggestFiscal(v){
- if(!v.resident||!['PF','PM'].includes(v.landlord)||!['PF','PM'].includes(v.tenant)||!['commercial','housing','furnished'].includes(v.use)||!['general','resico'].includes(v.regime))return null;
+ if(!v.resident||!['PF','PM'].includes(v.landlord)||!['PF','PM'].includes(v.tenant)||!['commercial','housing','furnished'].includes(v.use))return null;
  const taxable=v.use!=='housing',withheld=v.landlord==='PF'&&v.tenant==='PM';
+ if(withheld&&!['general','resico'].includes(v.regime))return null;
  return {iva:{mode:'percent',value:taxable?16:0},retIva:{mode:withheld&&taxable?'twoThirds':'percent',value:0},retIsr:{mode:'percent',value:withheld?(v.regime==='resico'?1.25:10):0}};
 }
