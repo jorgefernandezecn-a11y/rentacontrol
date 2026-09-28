@@ -120,7 +120,10 @@ export default async function handler(req,res){
           const next=incoming[section].find(x=>x.id===record.id);
           if(JSON.stringify(next)!==JSON.stringify(record))throw fail(409,'Este registro está en Historial. Vuelve a abrir la app para actualizar la información.');
         }
-        for(const contract of incoming.contracts.filter(x=>x.status==='Vigente')){
+        const activeProperties=new Set();
+        for(const contract of incoming.contracts.filter(x=>x.status==='Vigente'&&!x.archivedAt)){
+          if(activeProperties.has(contract.propertyId))throw fail(409,'Un inmueble no puede tener dos contratos vigentes. Revisa sus vínculos.');
+          activeProperties.add(contract.propertyId);
           if(before.tenants.some(x=>x.id===contract.tenantId&&x.archivedAt)||before.properties.some(x=>x.id===contract.propertyId&&x.archivedAt))throw fail(409,'Selecciona un inmueble y un inquilino activos para el nuevo contrato.');
         }
         for(const contract of incoming.contracts){

@@ -5,6 +5,7 @@ let allowed=true;const canDeleteEntity=()=>allowed,C=()=>({tenantId:'t',property
 ${fn}
 const records=[{id:'payment-a',contractId:'c',amount:1000,date:'2026-09-24',method:'Transferencia'}];
 cards.innerHTML=paymentCorrectionCards(records);
+const disclosure=cards.querySelector('details');if(disclosure){if(disclosure.open)throw Error('Debe iniciar compacto');disclosure.querySelector('summary').click();}
 const buttons=[...cards.querySelectorAll('button')];
 try{if(buttons.length!==2)throw Error('Faltan botones');for(const b of buttons){const r=b.getBoundingClientRect();if(r.right>cards.getBoundingClientRect().right||r.width<=0)throw Error('Botón fuera del contenedor móvil');}if(buttons[0].dataset.editPayment!=='payment-a'||buttons[1].dataset.deletePayment!=='payment-a')throw Error('ID incorrecto');allowed=false;if(paymentCorrectionCards(records)!=='')throw Error('Permisos');allowed=true;if(!paymentCorrectionCards([]).includes('No hay pagos'))throw Error('Periodo vacío');result.textContent='PASS: botones visibles en ancho móvil, ID correcto, permisos y periodo vacío';}catch(e){result.textContent='FAIL '+e.message}
 </script>`;
