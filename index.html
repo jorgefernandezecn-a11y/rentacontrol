@@ -853,7 +853,11 @@ function suspendAccess(){
   }
   pendingCloudSync=false;
 }
+// Native iOS preserves this in-memory session while locked/backgrounded.
+// A new web view still starts locked and revokes any previous cookie.
+const nativeSessionLifecycle=/\bRentaControlNative\/1\.1\b/.test(navigator.userAgent);
 document.addEventListener('visibilitychange',()=>{
+  if(nativeSessionLifecycle)return;
   if(document.visibilityState==='hidden'&&(currentSession||loginInFlight))suspendAccess();
   else if(document.visibilityState==='visible'&&accessSuspended)location.reload();
 });

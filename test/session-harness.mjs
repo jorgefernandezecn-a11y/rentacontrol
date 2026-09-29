@@ -28,6 +28,12 @@ frame.src='/?reset=test-token';await new Promise(r=>frame.onload=r);await wait((
 await load();doc().querySelector('#rememberUser').checked=true;await login();await load();check(doc().querySelector('#authEmail').value==='test@example.invalid','no recuerda correo');check(doc().querySelector('#rememberUser').checked,'opción no persistida');check(doc().querySelector('#authPassword').value==='','guardó contraseña en formulario');check(locked(),'recordar usuario abrió sesión');pass('Recordar usuario conserva solo correo y exige contraseña');
 doc().querySelector('#rememberUser').click();await load();check(doc().querySelector('#authEmail').value==='','no olvidó correo');check(!doc().querySelector('#rememberUser').checked,'opción sigue activa');check(!JSON.stringify({...frame.contentWindow.localStorage}).includes('Synthetic-password-123'),'contraseña almacenada localmente');pass('Desmarcar elimina correo; no se guarda contraseña local');
 doc().querySelector('#iphonePasswordHelp').open=true;check(doc().querySelector('#iphonePasswordHelp').textContent.includes('rentacontrol-ruddy.vercel.app'),'falta sitio para Apple');pass('Ayuda de Contraseñas Apple disponible');
+// Simulate the native wrapper's user agent before the app module executes.
+frame.src='/?native=1';await new Promise(r=>frame.onload=r);await wait(()=>doc().querySelector('#authForm')?.onsubmit);check(locked(),'nuevo proceso nativo restauró sesión');await login();check(!locked(),'login nativo');
+Object.defineProperty(doc(),'visibilityState',{configurable:true,value:'hidden'});doc().dispatchEvent(new Event('visibilitychange'));check(!locked(),'bloqueo del iPhone cerró sesión');
+Object.defineProperty(doc(),'visibilityState',{configurable:true,value:'visible'});doc().dispatchEvent(new Event('visibilitychange'));check(!locked(),'regreso nativo cerró sesión');pass('iPhone conserva sesión al bloquear/desbloquear');
+frame.src='/?native=1&restart=1';await new Promise(r=>frame.onload=r);await wait(()=>doc().querySelector('#authForm')?.onsubmit);check(locked(),'reinicio nativo no exige acceso');await login();
+const nativeExit=new Promise(r=>frame.onload=r);doc().querySelector('#signOutBtn').click();await nativeExit;await wait(()=>doc().querySelector('#authForm')?.onsubmit);check(locked(),'logout nativo conserva sesión');pass('Reinicio completo y cerrar sesión exigen acceso en iPhone');
 pass('TODAS LAS PRUEBAS COMPLETADAS');
 }catch(e){out.textContent=lines.join('\n')+'\nFAIL '+e.message}
 </script>`;
@@ -43,6 +49,6 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname.startsWith('/api/'))return send({users:[],documents:[]});
  const name=url.pathname==='/'?'index.html':decodeURIComponent(url.pathname.slice(1));
  if(!['index.html','fiscal.js','insurance-fields.js','BAL INTRERNATIONAL.png'].includes(name))return send({},404);
- res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html':name.endsWith('.js')?'text/javascript':'image/png'});res.end(await fs.readFile(new URL('../'+name,import.meta.url)));
+ res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html':name.endsWith('.js')?'text/javascript':'image/png'});let content=await fs.readFile(new URL('../'+name,import.meta.url));if(name==='index.html'&&url.searchParams.has('native'))content=content.toString().replace('<head>',`<head><script>Object.defineProperty(navigator,'userAgent',{value:'Test RentaControlNative/1.1'});</script>`);res.end(content);
 });
 server.listen(0,'127.0.0.1',()=>console.log('TEST URL http://127.0.0.1:'+server.address().port+'/test-runner'));
